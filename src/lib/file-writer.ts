@@ -288,69 +288,82 @@ export async function writeGeneratedFiles(
   const projectDir = path.join(OUTPUT_BASE, projectName);
   const written: string[] = [];
 
-  // Ensure project directory exists
-  await fs.mkdir(projectDir, { recursive: true });
-
-  // Create essential root files (index.html, index.js, package.json)
-  await createProjectRootFiles(projectDir);
-
-  // Then write the generated files
-  for (const file of files) {
-    const fullPath = path.join(projectDir, file.path);
-    const dir = path.dirname(fullPath);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(fullPath, file.content, "utf-8");
-    written.push(file.path);
+  // Try to create project directory - may fail on read-only file systems (Railway, etc.)
+  try {
+    await fs.mkdir(projectDir, { recursive: true });
+  } catch (err) {
+    console.warn("[file-writer] Could not create project directory (read-only filesystem?):", err);
+    // Return file paths anyway - client will handle storage
+    return files.map(f => f.path);
   }
 
-  // Create placeholder index.js files for any missing directories
-  await createPlaceholderIndexFiles(projectDir, files);
+  // Try to write files - may fail on read-only file systems
+  try {
+    // Create essential root files (index.html, index.js, package.json)
+    await createProjectRootFiles(projectDir);
 
-  // Create default app.js if not generated
-  const hasAppJs = files.some(f => f.path.match(/smbls[/\\]app\.js$/));
-  if (!hasAppJs) {
-    await fs.writeFile(
-      path.join(projectDir, "smbls", "app.js"),
-      `export default {
+    // Then write the generated files
+    for (const file of files) {
+      const fullPath = path.join(projectDir, file.path);
+      const dir = path.dirname(fullPath);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(fullPath, file.content, "utf-8");
+      written.push(file.path);
+    }
+
+    // Create placeholder index.js files for any missing directories
+    await createPlaceholderIndexFiles(projectDir, files);
+
+    // Create default app.js if not generated
+    const hasAppJs = files.some(f => f.path.match(/smbls[/\\]app\.js$/));
+    if (!hasAppJs) {
+      await fs.writeFile(
+        path.join(projectDir, "smbls", "app.js"),
+        `export default {
   tag: 'main',
   id: 'app',
   padding: '0',
   margin: '0',
   minHeight: '100vh'
 }\n`,
-      "utf-8"
-    );
-  }
-
-  // Ensure pages directory and index.js exist (but don't override AI-generated main.js)
-  const hasPages = files.some(f => f.path.match(/smbls[/\\]pages[/\\]/));
-  if (!hasPages) {
-    // Only create the pages/index.js registry - AI must generate main.js with actual components
-    await fs.mkdir(path.join(projectDir, "smbls", "pages"), { recursive: true });
-    
-    // Check if main.js already exists (from AI generation)
-    const mainJsPath = path.join(projectDir, "smbls", "pages", "main.js");
-    try {
-      await fs.access(mainJsPath);
-      // main.js exists, just ensure index.js points to it
-    } catch {
-      // main.js doesn't exist - this is an error, AI should have generated it
-      console.warn("[file-writer] WARNING: AI did not generate pages/main.js - project may not render correctly");
+        "utf-8"
+      );
     }
-    
-    // Always ensure pages/index.js exists and imports main
-    await fs.writeFile(
-      path.join(projectDir, "smbls", "pages", "index.js"),
-      `import { main } from './main.js'
+
+    // Ensure pages directory and index.js exist (but don't override AI-generated main.js)
+    const hasPages = files.some(f => f.path.match(/smbls[/\\]pages[/\\]/));
+    if (!hasPages) {
+      // Only create the pages/index.js registry - AI must generate main.js with actual components
+      await fs.mkdir(path.join(projectDir, "smbls", "pages"), { recursive: true });
+      
+      // Check if main.js already exists (from AI generation)
+      const mainJsPath = path.join(projectDir, "smbls", "pages", "main.js");
+      try {
+        await fs.access(mainJsPath);
+        // main.js exists, just ensure index.js points to it
+      } catch {
+        // main.js doesn't exist - this is an error, AI should have generated it
+        console.warn("[file-writer] WARNING: AI did not generate pages/main.js - project may not render correctly");
+      }
+      
+      // Always ensure pages/index.js exists and imports main
+      await fs.writeFile(
+        path.join(projectDir, "smbls", "pages", "index.js"),
+        `import { main } from './main.js'
 
 export default {
   '/': main
 }\n`,
-      "utf-8"
-    );
-  }
+        "utf-8"
+      );
+    }
 
-  return written;
+    return written;
+  } catch (err) {
+    console.warn("[file-writer] Could not write files to disk (read-only filesystem?):", err);
+    // Return file paths anyway - client will handle storage
+    return files.map(f => f.path);
+  }
 }
 
 export async function listOutputProjects(): Promise<string[]> {

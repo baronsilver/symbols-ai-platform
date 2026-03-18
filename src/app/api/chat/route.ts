@@ -429,8 +429,16 @@ ${projectContext}`,
             finalProjectName = `symbols-project-${Date.now()}`;
           }
           
+          // Try to write files to disk (may fail on read-only filesystems like Railway)
           const written = await writeGeneratedFiles(files, finalProjectName);
-          send({ type: "files", projectName: finalProjectName, files: written });
+          
+          // Send full file contents to client so it can handle storage
+          send({ 
+            type: "files", 
+            projectName: finalProjectName, 
+            files: written,
+            fileContents: files // Include full file contents for client-side storage
+          });
         }
 
         send({ type: "done" });
