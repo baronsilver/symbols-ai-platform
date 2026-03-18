@@ -1,0 +1,110 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background - Light theme -->
+  <rect width="800" height="500" fill="#ffffff"/>
+  
+  <!-- Navbar -->
+  <rect width="800" height="80" fill="#ffffff"/>
+  <rect y="79" width="800" height="1" fill="#EBEBEB"/>
+  
+  <!-- Airbnb Logo -->
+  <circle cx="44" cy="40" r="16" fill="#FF385C"/>
+  <rect x="70" y="32" width="60" height="16" rx="3" fill="#FF385C"/>
+  
+  <!-- Search Bar Pill -->
+  <rect x="280" y="24" width="240" height="48" rx="24" fill="#ffffff" stroke="#DDDDDD" stroke-width="1"/>
+  <rect x="296" y="36" width="60" height="10" rx="2" fill="#222222"/>
+  <rect x="366" y="32" width="1" height="18" fill="#DDDDDD"/>
+  <rect x="380" y="36" width="50" height="10" rx="2" fill="#717171"/>
+  <rect x="440" y="32" width="1" height="18" fill="#DDDDDD"/>
+  <rect x="454" y="36" width="40" height="10" rx="2" fill="#717171"/>
+  <circle cx="504" cy="40" r="14" fill="#FF385C"/>
+  
+  <!-- Right Nav -->
+  <rect x="620" y="32" width="80" height="12" rx="2" fill="#222222"/>
+  <circle cx="740" cy="40" r="20" fill="#f7f7f7" stroke="#DDDDDD" stroke-width="1"/>
+  
+  <!-- Category Bar -->
+  <rect y="80" width="800" height="70" fill="#ffffff"/>
+  <rect y="149" width="800" height="1" fill="#EBEBEB"/>
+  
+  <!-- Category Pills -->
+  <rect x="40" y="100" width="50" height="32" rx="4" fill="#ffffff"/>
+  <rect x="52" y="106" width="26" height="10" rx="2" fill="#222222"/>
+  <rect x="40" y="130" width="50" height="2" fill="#222222"/>
+  
+  <rect x="110" y="100" width="70" height="32" rx="4" fill="#ffffff"/>
+  <rect x="122" y="106" width="46" height="10" rx="2" fill="#717171"/>
+  
+  <rect x="200" y="100" width="55" height="32" rx="4" fill="#ffffff"/>
+  <rect x="212" y="106" width="31" height="10" rx="2" fill="#717171"/>
+  
+  <rect x="275" y="100" width="60" height="32" rx="4" fill="#ffffff"/>
+  <rect x="287" y="106" width="36" height="10" rx="2" fill="#717171"/>
+  
+  <rect x="355" y="100" width="45" height="32" rx="4" fill="#ffffff"/>
+  <rect x="367" y="106" width="21" height="10" rx="2" fill="#717171"/>
+  
+  <rect x="420" y="100" width="45" height="32" rx="4" fill="#ffffff"/>
+  <rect x="432" y="106" width="21" height="10" rx="2" fill="#717171"/>
+
+  <!-- Listings Grid - 4 columns -->
+  <!-- Card 1 -->
+  <rect x="40" y="170" width="170" height="160" rx="12" fill="#f1f1f1"/>
+  <rect x="40" y="170" width="170" height="160" rx="12" fill="#E8E8E8"/>
+  <!-- Heart -->
+  <circle cx="190" cy="190" r="14" fill="white" opacity="0.9"/>
+  <circle cx="190" cy="190" r="6" fill="none" stroke="#222222" stroke-width="1.5"/>
+  <!-- Badge -->
+  <rect x="50" y="180" width="70" height="20" rx="4" fill="white"/>
+  <rect x="56" y="186" width="58" height="8" rx="2" fill="#222222"/>
+  <!-- Info -->
+  <rect x="40" y="340" width="100" height="10" rx="2" fill="#222222"/>
+  <rect x="40" y="356" width="140" height="8" rx="2" fill="#717171"/>
+  <rect x="40" y="370" width="80" height="8" rx="2" fill="#717171"/>
+  <rect x="40" y="386" width="60" height="10" rx="2" fill="#222222"/>
+  <!-- Star -->
+  <rect x="170" y="340" width="30" height="10" rx="2" fill="#222222"/>
+
+  <!-- Card 2 -->
+  <rect x="230" y="170" width="170" height="160" rx="12" fill="#D4D4D4"/>
+  <circle cx="380" cy="190" r="14" fill="white" opacity="0.9"/>
+  <rect x="230" y="340" width="100" height="10" rx="2" fill="#222222"/>
+  <rect x="230" y="356" width="140" height="8" rx="2" fill="#717171"/>
+  <rect x="230" y="370" width="80" height="8" rx="2" fill="#717171"/>
+  <rect x="230" y="386" width="60" height="10" rx="2" fill="#222222"/>
+  <rect x="360" y="340" width="30" height="10" rx="2" fill="#222222"/>
+
+  <!-- Card 3 -->
+  <rect x="420" y="170" width="170" height="160" rx="12" fill="#BFBFBF"/>
+  <circle cx="570" cy="190" r="14" fill="white" opacity="0.9"/>
+  <circle cx="570" cy="190" r="5" fill="#FF385C"/>
+  <rect x="430" y="180" width="55" height="20" rx="4" fill="white"/>
+  <rect x="436" y="186" width="43" height="8" rx="2" fill="#222222"/>
+  <rect x="420" y="340" width="100" height="10" rx="2" fill="#222222"/>
+  <rect x="420" y="356" width="140" height="8" rx="2" fill="#717171"/>
+  <rect x="420" y="370" width="80" height="8" rx="2" fill="#717171"/>
+  <rect x="420" y="386" width="60" height="10" rx="2" fill="#222222"/>
+  <rect x="550" y="340" width="30" height="10" rx="2" fill="#222222"/>
+
+  <!-- Card 4 -->
+  <rect x="610" y="170" width="170" height="160" rx="12" fill="#A8A8A8"/>
+  <circle cx="760" cy="190" r="14" fill="white" opacity="0.9"/>
+  <rect x="610" y="340" width="100" height="10" rx="2" fill="#222222"/>
+  <rect x="610" y="356" width="140" height="8" rx="2" fill="#717171"/>
+  <rect x="610" y="370" width="80" height="8" rx="2" fill="#717171"/>
+  <rect x="610" y="386" width="60" height="10" rx="2" fill="#222222"/>
+  <rect x="740" y="340" width="30" height="10" rx="2" fill="#222222"/>
+
+  <!-- Second Row Cards -->
+  <!-- Card 5 -->
+  <rect x="40" y="410" width="170" height="80" rx="12" fill="#C4C4C4"/>
+  
+  <!-- Card 6 -->
+  <rect x="230" y="410" width="170" height="80" rx="12" fill="#E0E0E0"/>
+  
+  <!-- Card 7 -->
+  <rect x="420" y="410" width="170" height="80" rx="12" fill="#D0D0D0"/>
+  
+  <!-- Card 8 -->
+  <rect x="610" y="410" width="170" height="80" rx="12" fill="#B8B8B8"/>
+</svg>

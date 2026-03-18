@@ -1,0 +1,68 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#1c1917"/>
+  
+  <!-- Navbar -->
+  <rect width="800" height="60" fill="#292524"/>
+  <rect x="24" y="18" width="100" height="24" rx="4" fill="#d97706"/>
+  <rect x="160" y="24" width="40" height="12" rx="2" fill="#a8a29e"/>
+  <rect x="216" y="24" width="45" height="12" rx="2" fill="#a8a29e"/>
+  <rect x="277" y="24" width="80" height="12" rx="2" fill="#a8a29e"/>
+  <rect x="373" y="24" width="50" height="12" rx="2" fill="#a8a29e"/>
+  <rect x="660" y="16" width="116" height="28" rx="6" fill="#d97706"/>
+  <text x="680" y="34" font-family="Georgia, serif" font-size="11" fill="#1c1917">Book a Table</text>
+
+  <!-- Hero with overlay -->
+  <rect y="60" width="800" height="200" fill="#44403c"/>
+  <rect y="60" width="800" height="200" fill="#1c1917" opacity="0.6"/>
+  <rect x="240" y="100" width="320" height="32" rx="4" fill="#fef3c7"/>
+  <text x="290" y="122" font-family="Georgia, serif" font-size="18" fill="#1c1917">La Maison Dorée</text>
+  <rect x="280" y="144" width="240" height="12" rx="2" fill="#a8a29e"/>
+  <rect x="300" y="180" width="90" height="36" rx="6" fill="#d97706"/>
+  <rect x="410" y="180" width="90" height="36" rx="6" fill="none" stroke="#d97706" stroke-width="2"/>
+
+  <!-- Menu Section -->
+  <rect y="260" width="800" height="40" fill="#292524"/>
+  <rect x="200" y="270" width="70" height="24" rx="12" fill="#d97706"/>
+  <text x="212" y="286" font-family="system-ui" font-size="10" fill="white">Starters</text>
+  <rect x="284" y="270" width="60" height="24" rx="12" fill="#44403c"/>
+  <text x="296" y="286" font-family="system-ui" font-size="10" fill="#a8a29e">Mains</text>
+  <rect x="358" y="270" width="70" height="24" rx="12" fill="#44403c"/>
+  <text x="370" y="286" font-family="system-ui" font-size="10" fill="#a8a29e">Desserts</text>
+  <rect x="442" y="270" width="56" height="24" rx="12" fill="#44403c"/>
+  <text x="454" y="286" font-family="system-ui" font-size="10" fill="#a8a29e">Drinks</text>
+
+  <!-- Dish Cards -->
+  <rect x="24" y="316" width="240" height="90" rx="8" fill="#292524"/>
+  <rect x="24" y="316" width="90" height="90" rx="8" fill="#44403c"/>
+  <rect x="126" y="326" width="120" height="12" rx="2" fill="#fef3c7"/>
+  <rect x="126" y="346" width="100" height="8" rx="2" fill="#78716c"/>
+  <rect x="126" y="360" width="80" height="8" rx="2" fill="#78716c"/>
+  <rect x="126" y="382" width="50" height="14" rx="2" fill="#d97706"/>
+  <circle cx="242" cy="389" r="8" fill="#22c55e" opacity="0.8"/>
+  <text x="238" y="393" font-family="system-ui" font-size="10" fill="white">V</text>
+
+  <rect x="280" y="316" width="240" height="90" rx="8" fill="#292524"/>
+  <rect x="280" y="316" width="90" height="90" rx="8" fill="#44403c"/>
+  <rect x="382" y="326" width="120" height="12" rx="2" fill="#fef3c7"/>
+  <rect x="382" y="346" width="100" height="8" rx="2" fill="#78716c"/>
+  <rect x="382" y="360" width="80" height="8" rx="2" fill="#78716c"/>
+  <rect x="382" y="382" width="50" height="14" rx="2" fill="#d97706"/>
+
+  <rect x="536" y="316" width="240" height="90" rx="8" fill="#292524"/>
+  <rect x="536" y="316" width="90" height="90" rx="8" fill="#44403c"/>
+  <rect x="638" y="326" width="120" height="12" rx="2" fill="#fef3c7"/>
+  <rect x="638" y="346" width="100" height="8" rx="2" fill="#78716c"/>
+  <rect x="638" y="360" width="80" height="8" rx="2" fill="#78716c"/>
+  <rect x="638" y="382" width="50" height="14" rx="2" fill="#d97706"/>
+  <circle cx="754" cy="389" r="8" fill="#3b82f6" opacity="0.8"/>
+  <text x="747" y="393" font-family="system-ui" font-size="9" fill="white">GF</text>
+
+  <!-- Gallery Preview -->
+  <rect x="24" y="420" width="120" height="68" rx="6" fill="#44403c"/>
+  <rect x="156" y="420" width="120" height="68" rx="6" fill="#57534e"/>
+  <rect x="288" y="420" width="120" height="68" rx="6" fill="#44403c"/>
+  <rect x="420" y="420" width="120" height="68" rx="6" fill="#57534e"/>
+  <rect x="552" y="420" width="120" height="68" rx="6" fill="#44403c"/>
+  <rect x="684" y="420" width="92" height="68" rx="6" fill="#57534e"/>
+</svg>

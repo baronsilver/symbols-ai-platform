@@ -1,0 +1,101 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#121212"/>
+  
+  <!-- Left Sidebar -->
+  <rect width="220" height="420" fill="#000000"/>
+  <rect x="24" y="20" width="80" height="24" rx="4" fill="#22c55e"/>
+  <rect x="24" y="64" width="160" height="32" rx="6" fill="transparent"/>
+  <rect x="40" y="74" width="12" height="12" rx="2" fill="#b3b3b3"/>
+  <rect x="60" y="74" width="50" height="12" rx="2" fill="white"/>
+  <rect x="24" y="100" width="160" height="32" rx="6" fill="transparent"/>
+  <rect x="40" y="110" width="12" height="12" rx="2" fill="#b3b3b3"/>
+  <rect x="60" y="110" width="50" height="12" rx="2" fill="#b3b3b3"/>
+  <rect x="24" y="136" width="160" height="32" rx="6" fill="transparent"/>
+  <rect x="40" y="146" width="12" height="12" rx="2" fill="#b3b3b3"/>
+  <rect x="60" y="146" width="55" height="12" rx="2" fill="#b3b3b3"/>
+  
+  <!-- Playlists -->
+  <rect x="24" y="196" width="180" height="1" fill="#282828"/>
+  <rect x="24" y="216" width="36" height="36" rx="4" fill="#282828"/>
+  <rect x="68" y="224" width="100" height="10" rx="2" fill="#b3b3b3"/>
+  <rect x="68" y="238" width="60" height="8" rx="2" fill="#535353"/>
+  <rect x="24" y="264" width="36" height="36" rx="4" fill="#282828"/>
+  <rect x="68" y="272" width="90" height="10" rx="2" fill="#b3b3b3"/>
+  <rect x="68" y="286" width="50" height="8" rx="2" fill="#535353"/>
+  <rect x="24" y="312" width="36" height="36" rx="4" fill="#282828"/>
+  <rect x="68" y="320" width="110" height="10" rx="2" fill="#b3b3b3"/>
+  <rect x="68" y="334" width="70" height="8" rx="2" fill="#535353"/>
+
+  <!-- Main Content -->
+  <rect x="220" y="0" width="580" height="420" fill="#121212"/>
+  <rect x="244" y="24" width="200" height="28" rx="4" fill="white"/>
+  <text x="260" y="44" font-family="system-ui" font-size="16" font-weight="bold" fill="#121212">Good evening</text>
+
+  <!-- Recently Played -->
+  <rect x="244" y="72" width="120" height="14" rx="2" fill="white"/>
+  
+  <!-- Album Cards Row 1 -->
+  <rect x="244" y="100" width="160" height="56" rx="6" fill="#282828"/>
+  <rect x="244" y="100" width="56" height="56" rx="6" fill="#535353"/>
+  <rect x="308" y="116" width="80" height="10" rx="2" fill="white"/>
+  <rect x="308" y="132" width="60" height="8" rx="2" fill="#b3b3b3"/>
+
+  <rect x="416" y="100" width="160" height="56" rx="6" fill="#282828"/>
+  <rect x="416" y="100" width="56" height="56" rx="6" fill="#535353"/>
+  <rect x="480" y="116" width="80" height="10" rx="2" fill="white"/>
+  <rect x="480" y="132" width="60" height="8" rx="2" fill="#b3b3b3"/>
+
+  <rect x="588" y="100" width="160" height="56" rx="6" fill="#282828"/>
+  <rect x="588" y="100" width="56" height="56" rx="6" fill="#535353"/>
+  <rect x="652" y="116" width="80" height="10" rx="2" fill="white"/>
+  <rect x="652" y="132" width="60" height="8" rx="2" fill="#b3b3b3"/>
+
+  <!-- Made For You -->
+  <rect x="244" y="180" width="100" height="14" rx="2" fill="white"/>
+  
+  <!-- Playlist Cards -->
+  <rect x="244" y="208" width="130" height="170" rx="8" fill="#181818"/>
+  <rect x="256" y="220" width="106" height="106" rx="4" fill="#282828"/>
+  <rect x="256" y="338" width="90" height="10" rx="2" fill="white"/>
+  <rect x="256" y="354" width="100" height="8" rx="2" fill="#b3b3b3"/>
+  <circle cx="338" cy="302" r="20" fill="#22c55e"/>
+  <text x="332" y="308" font-family="system-ui" font-size="16" fill="black">▶</text>
+
+  <rect x="390" y="208" width="130" height="170" rx="8" fill="#181818"/>
+  <rect x="402" y="220" width="106" height="106" rx="4" fill="#282828"/>
+  <rect x="402" y="338" width="80" height="10" rx="2" fill="white"/>
+  <rect x="402" y="354" width="100" height="8" rx="2" fill="#b3b3b3"/>
+
+  <rect x="536" y="208" width="130" height="170" rx="8" fill="#181818"/>
+  <rect x="548" y="220" width="106" height="106" rx="4" fill="#282828"/>
+  <rect x="548" y="338" width="95" height="10" rx="2" fill="white"/>
+  <rect x="548" y="354" width="100" height="8" rx="2" fill="#b3b3b3"/>
+
+  <rect x="682" y="208" width="94" height="170" rx="8" fill="#181818"/>
+  <rect x="694" y="220" width="70" height="70" rx="4" fill="#282828"/>
+
+  <!-- Now Playing Bar -->
+  <rect y="420" width="800" height="80" fill="#181818"/>
+  <rect y="420" width="800" height="1" fill="#282828"/>
+  
+  <!-- Album art -->
+  <rect x="16" y="436" width="48" height="48" rx="4" fill="#282828"/>
+  <rect x="76" y="444" width="100" height="10" rx="2" fill="white"/>
+  <rect x="76" y="460" width="70" height="8" rx="2" fill="#b3b3b3"/>
+
+  <!-- Playback controls -->
+  <circle cx="360" cy="448" r="8" fill="#b3b3b3"/>
+  <circle cx="400" cy="448" r="16" fill="white"/>
+  <text x="394" y="454" font-family="system-ui" font-size="14" fill="black">▶</text>
+  <circle cx="440" cy="448" r="8" fill="#b3b3b3"/>
+  
+  <!-- Progress bar -->
+  <rect x="300" y="472" width="200" height="4" rx="2" fill="#535353"/>
+  <rect x="300" y="472" width="80" height="4" rx="2" fill="#22c55e"/>
+  <circle cx="380" cy="474" r="4" fill="white"/>
+
+  <!-- Volume -->
+  <rect x="680" y="458" width="80" height="4" rx="2" fill="#535353"/>
+  <rect x="680" y="458" width="50" height="4" rx="2" fill="white"/>
+</svg>

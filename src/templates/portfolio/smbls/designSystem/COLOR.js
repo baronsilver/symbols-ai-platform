@@ -1,0 +1,21 @@
+export default {
+  white: '#ffffff',
+  black: '#000000',
+  pageBg: '#0a0a0a',
+  surfaceBg: '#111111',
+  cardBg: '#161616',
+  cardBorder: '#222222',
+  textPrimary: '#f5f5f5',
+  textSecondary: '#888888',
+  textMuted: '#555555',
+  accent: '#d4ff00',
+  accentDark: '#b3d900',
+  tagBg: '#1e1e1e',
+  tagText: '#aaaaaa',
+  divider: '#1e1e1e',
+  navBg: 'rgba(10,10,10,0.9)',
+  filterActive: '#f5f5f5',
+  filterActiveBg: '#ffffff',
+  filterActiveText: '#000000',
+  hoverOverlay: 'rgba(0,0,0,0.6)'
+}

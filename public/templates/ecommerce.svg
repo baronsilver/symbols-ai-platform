@@ -1,0 +1,86 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#0f172a"/>
+  
+  <!-- Navbar -->
+  <rect width="800" height="52" fill="#1e293b"/>
+  <rect x="20" y="18" width="60" height="16" rx="4" fill="#6366f1"/>
+  <rect x="100" y="20" width="240" height="12" rx="6" fill="#334155"/>
+  <circle cx="356" cy="26" r="6" fill="#94a3b8"/>
+  <rect x="680" y="14" width="100" height="24" rx="6" fill="#6366f1"/>
+  
+  <!-- Hero Banner -->
+  <rect y="52" width="800" height="180" fill="url(#heroGrad)"/>
+  <rect x="40" y="80" width="120" height="10" rx="3" fill="#818cf8" opacity="0.8"/>
+  <rect x="40" y="100" width="300" height="24" rx="4" fill="white"/>
+  <rect x="40" y="132" width="260" height="10" rx="3" fill="#94a3b8"/>
+  <rect x="40" y="148" width="220" height="10" rx="3" fill="#94a3b8"/>
+  <rect x="40" y="175" width="120" height="32" rx="6" fill="#6366f1"/>
+  <rect x="172" y="175" width="100" height="32" rx="6" fill="none" stroke="#475569" stroke-width="1"/>
+  <rect x="460" y="68" width="300" height="156" rx="10" fill="#1e293b" opacity="0.8"/>
+  <rect x="472" y="78" width="276" height="136" rx="8" fill="#334155" opacity="0.6"/>
+  <text x="560" y="155" font-family="system-ui" font-size="32" fill="#6366f1" opacity="0.4">🛍</text>
+
+  <!-- Category Tabs -->
+  <rect y="232" width="800" height="40" fill="#f8fafc"/>
+  <rect x="20" y="242" width="80" height="20" rx="10" fill="#6366f1"/>
+  <text x="36" y="256" font-family="system-ui" font-size="10" fill="white">All Products</text>
+  <rect x="112" y="242" width="80" height="20" rx="10" fill="#f1f5f9"/>
+  <text x="124" y="256" font-family="system-ui" font-size="10" fill="#64748b">Electronics</text>
+  <rect x="204" y="242" width="64" height="20" rx="10" fill="#f1f5f9"/>
+  <text x="216" y="256" font-family="system-ui" font-size="10" fill="#64748b">Fashion</text>
+  <rect x="280" y="242" width="52" height="20" rx="10" fill="#f1f5f9"/>
+  <text x="292" y="256" font-family="system-ui" font-size="10" fill="#64748b">Home</text>
+  <rect x="344" y="242" width="56" height="20" rx="10" fill="#f1f5f9"/>
+  <text x="356" y="256" font-family="system-ui" font-size="10" fill="#64748b">Sports</text>
+
+  <!-- Product Grid -->
+  <!-- Card 1 -->
+  <rect x="20" y="284" width="175" height="196" rx="8" fill="white"/>
+  <rect x="20" y="284" width="175" height="110" rx="8" fill="#e2e8f0"/>
+  <rect x="28" y="292" width="44" height="16" rx="4" fill="#fef3c7"/>
+  <text x="34" y="304" font-family="system-ui" font-size="9" fill="#92400e">Sale</text>
+  <rect x="28" y="402" width="120" height="8" rx="2" fill="#0f172a"/>
+  <rect x="28" y="416" width="80" height="6" rx="2" fill="#94a3b8"/>
+  <rect x="28" y="432" width="60" height="10" rx="2" fill="#6366f1"/>
+  <rect x="152" y="430" width="28" height="28" rx="6" fill="#6366f1"/>
+  <text x="161" y="449" font-family="system-ui" font-size="16" fill="white">+</text>
+
+  <!-- Card 2 -->
+  <rect x="207" y="284" width="175" height="196" rx="8" fill="white"/>
+  <rect x="207" y="284" width="175" height="110" rx="8" fill="#dbeafe"/>
+  <rect x="215" y="292" width="32" height="16" rx="4" fill="#d1fae5"/>
+  <text x="221" y="304" font-family="system-ui" font-size="9" fill="#065f46">New</text>
+  <rect x="215" y="402" width="120" height="8" rx="2" fill="#0f172a"/>
+  <rect x="215" y="416" width="80" height="6" rx="2" fill="#94a3b8"/>
+  <rect x="215" y="432" width="60" height="10" rx="2" fill="#6366f1"/>
+
+  <!-- Card 3 -->
+  <rect x="394" y="284" width="175" height="196" rx="8" fill="white"/>
+  <rect x="394" y="284" width="175" height="110" rx="8" fill="#fce7f3"/>
+  <rect x="402" y="292" width="52" height="16" rx="4" fill="#ede9fe"/>
+  <text x="408" y="304" font-family="system-ui" font-size="9" fill="#5b21b6">Popular</text>
+  <rect x="402" y="402" width="120" height="8" rx="2" fill="#0f172a"/>
+  <rect x="402" y="416" width="80" height="6" rx="2" fill="#94a3b8"/>
+  <rect x="402" y="432" width="60" height="10" rx="2" fill="#6366f1"/>
+
+  <!-- Card 4 -->
+  <rect x="581" y="284" width="175" height="196" rx="8" fill="white"/>
+  <rect x="581" y="284" width="175" height="110" rx="8" fill="#fef3c7"/>
+  <rect x="589" y="292" width="44" height="16" rx="4" fill="#fef3c7"/>
+  <text x="595" y="304" font-family="system-ui" font-size="9" fill="#92400e">Sale</text>
+  <rect x="589" y="402" width="120" height="8" rx="2" fill="#0f172a"/>
+  <rect x="589" y="416" width="80" height="6" rx="2" fill="#94a3b8"/>
+  <rect x="589" y="432" width="60" height="10" rx="2" fill="#6366f1"/>
+
+  <!-- Footer hint -->
+  <rect y="488" width="800" height="12" fill="#1e293b"/>
+  
+  <defs>
+    <linearGradient id="heroGrad" x1="0" y1="0" x2="800" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+  </defs>
+</svg>

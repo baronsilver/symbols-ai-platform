@@ -1,0 +1,86 @@
+<svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f8fafc"/>
+  
+  <!-- Navbar -->
+  <rect width="800" height="64" fill="white"/>
+  <rect width="800" height="64" fill="white" filter="url(#shadow)"/>
+  <rect x="24" y="20" width="90" height="24" rx="4" fill="#0ea5e9"/>
+  <rect x="140" y="26" width="30" height="12" rx="2" fill="#64748b"/>
+  <rect x="186" y="26" width="35" height="12" rx="2" fill="#64748b"/>
+  <rect x="237" y="26" width="25" height="12" rx="2" fill="#64748b"/>
+  <rect x="278" y="26" width="45" height="12" rx="2" fill="#64748b"/>
+  <rect x="660" y="18" width="116" height="28" rx="6" fill="#0ea5e9"/>
+  <text x="680" y="36" font-family="system-ui" font-size="11" fill="white">List Property</text>
+
+  <!-- Hero Search -->
+  <rect y="64" width="800" height="160" fill="#e0f2fe"/>
+  <rect x="100" y="100" width="600" height="56" rx="28" fill="white" filter="url(#shadow)"/>
+  <rect x="120" y="118" width="140" height="20" rx="4" fill="#f1f5f9"/>
+  <rect x="128" y="124" width="80" height="8" rx="2" fill="#94a3b8"/>
+  <rect x="280" y="118" width="100" height="20" rx="4" fill="#f1f5f9"/>
+  <rect x="288" y="124" width="60" height="8" rx="2" fill="#94a3b8"/>
+  <rect x="400" y="118" width="100" height="20" rx="4" fill="#f1f5f9"/>
+  <rect x="408" y="124" width="70" height="8" rx="2" fill="#94a3b8"/>
+  <rect x="600" y="108" width="80" height="36" rx="18" fill="#0ea5e9"/>
+  <text x="620" y="130" font-family="system-ui" font-size="12" fill="white">Search</text>
+
+  <!-- Filter Bar -->
+  <rect y="224" width="800" height="44" fill="white"/>
+  <rect x="24" y="234" width="40" height="24" rx="12" fill="#0ea5e9"/>
+  <text x="34" y="250" font-family="system-ui" font-size="10" fill="white">All</text>
+  <rect x="76" y="234" width="56" height="24" rx="12" fill="#f1f5f9"/>
+  <text x="88" y="250" font-family="system-ui" font-size="10" fill="#64748b">House</text>
+  <rect x="144" y="234" width="75" height="24" rx="12" fill="#f1f5f9"/>
+  <text x="156" y="250" font-family="system-ui" font-size="10" fill="#64748b">Apartment</text>
+  <rect x="231" y="234" width="55" height="24" rx="12" fill="#f1f5f9"/>
+  <text x="243" y="250" font-family="system-ui" font-size="10" fill="#64748b">Condo</text>
+  <rect x="298" y="234" width="75" height="24" rx="12" fill="#f1f5f9"/>
+  <text x="310" y="250" font-family="system-ui" font-size="10" fill="#64748b">Townhouse</text>
+
+  <!-- Property Cards -->
+  <rect x="24" y="284" width="240" height="196" rx="12" fill="white" filter="url(#shadow)"/>
+  <rect x="24" y="284" width="240" height="120" rx="12" fill="#cbd5e1"/>
+  <circle cx="244" cy="304" r="14" fill="white"/>
+  <text x="238" y="309" font-family="system-ui" font-size="14" fill="#ef4444">♡</text>
+  <rect x="36" y="414" width="100" height="14" rx="2" fill="#0f172a"/>
+  <rect x="36" y="434" width="180" height="8" rx="2" fill="#64748b"/>
+  <rect x="36" y="454" width="40" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="44" y="466" font-family="system-ui" font-size="9" fill="#64748b">3 bd</text>
+  <rect x="84" y="454" width="40" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="92" y="466" font-family="system-ui" font-size="9" fill="#64748b">2 ba</text>
+  <rect x="132" y="454" width="55" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="140" y="466" font-family="system-ui" font-size="9" fill="#64748b">1,850 ft²</text>
+
+  <rect x="280" y="284" width="240" height="196" rx="12" fill="white" filter="url(#shadow)"/>
+  <rect x="280" y="284" width="240" height="120" rx="12" fill="#bfdbfe"/>
+  <circle cx="500" cy="304" r="14" fill="white"/>
+  <text x="494" y="309" font-family="system-ui" font-size="14" fill="#ef4444">♥</text>
+  <rect x="292" y="414" width="100" height="14" rx="2" fill="#0f172a"/>
+  <rect x="292" y="434" width="180" height="8" rx="2" fill="#64748b"/>
+  <rect x="292" y="454" width="40" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="300" y="466" font-family="system-ui" font-size="9" fill="#64748b">4 bd</text>
+  <rect x="340" y="454" width="40" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="348" y="466" font-family="system-ui" font-size="9" fill="#64748b">3 ba</text>
+  <rect x="388" y="454" width="55" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="396" y="466" font-family="system-ui" font-size="9" fill="#64748b">2,400 ft²</text>
+
+  <rect x="536" y="284" width="240" height="196" rx="12" fill="white" filter="url(#shadow)"/>
+  <rect x="536" y="284" width="240" height="120" rx="12" fill="#d1fae5"/>
+  <circle cx="756" cy="304" r="14" fill="white"/>
+  <text x="750" y="309" font-family="system-ui" font-size="14" fill="#ef4444">♡</text>
+  <rect x="548" y="414" width="100" height="14" rx="2" fill="#0f172a"/>
+  <rect x="548" y="434" width="180" height="8" rx="2" fill="#64748b"/>
+  <rect x="548" y="454" width="40" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="556" y="466" font-family="system-ui" font-size="9" fill="#64748b">2 bd</text>
+  <rect x="596" y="454" width="40" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="604" y="466" font-family="system-ui" font-size="9" fill="#64748b">2 ba</text>
+  <rect x="644" y="454" width="55" height="16" rx="4" fill="#f1f5f9"/>
+  <text x="652" y="466" font-family="system-ui" font-size="9" fill="#64748b">1,200 ft²</text>
+
+  <defs>
+    <filter id="shadow" x="-4" y="-4" width="808" height="72" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+</svg>
