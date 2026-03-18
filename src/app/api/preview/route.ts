@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const projectPath = path.resolve(process.cwd(), "..", "output", projectName);
+  const projectPath = path.join(process.cwd(), "output", projectName);
 
   // Check if project exists
   try {

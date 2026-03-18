@@ -20,8 +20,9 @@
 # production
 /build
 
-# generated symbols projects
-/output
+# generated symbols projects (keep folder, ignore contents)
+/output/*
+!/output/.gitkeep
 
 # misc
 .DS_Store

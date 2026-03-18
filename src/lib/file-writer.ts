@@ -1,22 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 
-// process.cwd() can be either:
-//   C:\Repos\symbols-ai-platform        (when Next.js runs from root)
-//   C:\Repos\symbols-ai-platform\chat   (when running from chat dir)
-// We find the symbols-ai-platform root by looking for the "output" sibling folder
-function findProjectRoot(): string {
-  const cwd = process.cwd();
-  // If cwd is the chat folder, go up one level
-  if (path.basename(cwd) === "chat") {
-    return path.dirname(cwd);
-  }
-  // If cwd already has an "output" sibling or is root, use it
-  return cwd;
-}
-
-const PROJECT_ROOT = findProjectRoot();
-const OUTPUT_BASE = path.join(PROJECT_ROOT, "output");
+// Output folder is at the project root (same level as package.json)
+// process.cwd() returns the directory where Next.js is running from
+const OUTPUT_BASE = path.join(process.cwd(), "output");
 
 export interface GeneratedFile {
   path: string;
