@@ -14,7 +14,7 @@ interface UseChatReturn {
   isLoading: boolean;
   error: string | null;
   toolActivity: ToolActivity[];
-  generatedFiles: { projectName: string; files: string[] } | null;
+  generatedFiles: { projectName: string; files: string[]; fileContents?: Array<{ path: string; content: string }> } | null;
   activeProject: string | null;
   sendMessage: (content: string, options?: { customProjectName?: string; goal?: string; task?: string }) => Promise<void>;
   clearMessages: () => void;
@@ -35,6 +35,7 @@ export function useChat(): UseChatReturn {
   const [generatedFiles, setGeneratedFiles] = useState<{
     projectName: string;
     files: string[];
+    fileContents?: Array<{ path: string; content: string }>;
   } | null>(null);
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [model, setModel] = useState<ModelId>("anthropic/claude-opus-4.6");
@@ -199,6 +200,7 @@ export function useChat(): UseChatReturn {
                   setGeneratedFiles({
                     projectName: data.projectName,
                     files: data.files,
+                    fileContents: data.fileContents,
                   });
                   setActiveProject(data.projectName);
                   break;

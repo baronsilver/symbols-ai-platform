@@ -9,10 +9,11 @@ import { X, ExternalLink, Code2, Monitor } from "lucide-react";
 interface ProjectVisualizerProps {
   projectName: string;
   files: string[];
+  fileContents?: Array<{ path: string; content: string }>;
   onClose: () => void;
 }
 
-export function ProjectVisualizer({ projectName, files, onClose }: ProjectVisualizerProps) {
+export function ProjectVisualizer({ projectName, files, fileContents, onClose }: ProjectVisualizerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -137,7 +138,7 @@ export function ProjectVisualizer({ projectName, files, onClose }: ProjectVisual
                   </div>
                 )
               ) : (
-                <ProjectPreview projectName={projectName} />
+                <ProjectPreview projectName={projectName} fileContents={fileContents} />
               )}
             </div>
           </div>

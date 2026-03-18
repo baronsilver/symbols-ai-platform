@@ -361,6 +361,7 @@ ${code}
         <ProjectVisualizer
           projectName={"projectName" in displayProject ? displayProject.projectName : displayProject.name}
           files={displayProject.files}
+          fileContents={"fileContents" in displayProject ? displayProject.fileContents : undefined}
           onClose={() => {
             setShowVisualizer(false);
             setSelectedProject(null);
