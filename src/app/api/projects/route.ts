@@ -42,7 +42,7 @@ async function getProjectFiles(projectPath: string): Promise<string[]> {
 
 export async function GET(req: NextRequest) {
   try {
-    const outputDir = path.resolve(process.cwd(), "..", "output");
+    const outputDir = path.join(process.cwd(), "output");
     
     // Check if output directory exists
     try {
