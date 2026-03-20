@@ -1,21 +1,45 @@
 "use client";
 
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Edit2, Save, X } from "lucide-react";
 import { useState } from "react";
 
 interface CodeViewerProps {
   filePath: string;
   content: string;
   language?: string;
+  onSave?: (newContent: string) => Promise<void>;
+  isEditable?: boolean;
 }
 
-export function CodeViewer({ filePath, content, language }: CodeViewerProps) {
+export function CodeViewer({ filePath, content, language, onSave, isEditable = false }: CodeViewerProps) {
   const [copied, setCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(content);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+    navigator.clipboard.writeText(isEditing ? editedContent : content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSave = async () => {
+    if (!onSave) return;
+    setIsSaving(true);
+    try {
+      await onSave(editedContent);
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Failed to save:", err);
+      alert("Failed to save file");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditedContent(content);
+    setIsEditing(false);
   };
 
   const getLanguage = () => {
@@ -40,27 +64,70 @@ export function CodeViewer({ filePath, content, language }: CodeViewerProps) {
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xs font-mono text-muted truncate">{filePath}</span>
         </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-accent/10 transition-colors flex-shrink-0"
-        >
-          {copied ? (
+        <div className="flex items-center gap-1">
+          {isEditing ? (
             <>
-              <Check size={12} className="text-green-500" />
-              <span className="text-green-500">Copied</span>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors flex-shrink-0 disabled:opacity-50"
+              >
+                <Save size={12} />
+                <span>{isSaving ? "Saving..." : "Save"}</span>
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-error/10 text-error transition-colors flex-shrink-0"
+              >
+                <X size={12} />
+                <span>Cancel</span>
+              </button>
             </>
           ) : (
             <>
-              <Copy size={12} />
-              <span>Copy</span>
+              {isEditable && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-accent/10 transition-colors flex-shrink-0"
+                >
+                  <Edit2 size={12} />
+                  <span>Edit</span>
+                </button>
+              )}
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-accent/10 transition-colors flex-shrink-0"
+              >
+                {copied ? (
+                  <>
+                    <Check size={12} className="text-green-500" />
+                    <span className="text-green-500">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
             </>
           )}
-        </button>
+        </div>
       </div>
       <div className="flex-1 overflow-auto">
-        <pre className="p-4 text-xs font-mono leading-relaxed">
-          <code className={`language-${getLanguage()}`}>{content}</code>
-        </pre>
+        {isEditing ? (
+          <textarea
+            value={editedContent}
+            onChange={(e) => setEditedContent(e.target.value)}
+            className="w-full h-full p-4 text-xs font-mono leading-relaxed bg-background text-foreground border-none outline-none resize-none"
+            spellCheck="false"
+          />
+        ) : (
+          <pre className="p-4 text-xs font-mono leading-relaxed">
+            <code className={`language-${getLanguage()}`}>{content}</code>
+          </pre>
+        )}
       </div>
     </div>
   );

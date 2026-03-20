@@ -92,8 +92,17 @@ Always generate complete file contents, never partial snippets. Include all requ
 
 export async function POST(req: NextRequest) {
   const { messages, model, autoMcp, goal, task, projectName: customProjectName, activeProject } = await req.json();
-  const apiProvider = req.headers.get("x-api-provider") as "openrouter" | "claude" | null;
-  const apiKey = req.headers.get("x-api-key") ?? 
+  let apiProvider = req.headers.get("x-api-provider") as "openrouter" | "claude" | null;
+  const apiKeyHeader = req.headers.get("x-api-key");
+  
+  // Determine provider - prefer header, then check for env keys
+  if (!apiProvider) {
+    const claudeKey = process.env.CLAUDE_API_KEY;
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    apiProvider = claudeKey ? "claude" : "openrouter";
+  }
+  
+  const apiKey = apiKeyHeader ?? 
     (apiProvider === "claude" ? process.env.CLAUDE_API_KEY : process.env.OPENROUTER_API_KEY);
 
   // Load previous context

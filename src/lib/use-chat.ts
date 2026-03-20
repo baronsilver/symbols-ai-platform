@@ -38,26 +38,36 @@ export function useChat(): UseChatReturn {
     fileContents?: Array<{ path: string; content: string }>;
   } | null>(null);
   const [activeProject, setActiveProject] = useState<string | null>(null);
-  const [model, setModel] = useState<ModelId>("anthropic/claude-opus-4.6");
+  const [model, setModel] = useState<ModelId>("claude-opus-4-6");
   const [apiKey, setApiKey] = useState("");
-  const [apiProvider, setApiProvider] = useState<"openrouter" | "claude">("openrouter");
+  const [apiProvider, setApiProvider] = useState<"openrouter" | "claude">("claude");
   const [autoMcp, setAutoMcp] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load API key and provider from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
     const storedProvider = localStorage.getItem("api-provider") as "openrouter" | "claude" | null;
-    const storedKey = localStorage.getItem(storedProvider === "claude" ? "claude-api-key" : "openrouter-api-key");
-    if (storedProvider) {
-      setApiProvider(storedProvider);
-      // Set default model for the provider
-      if (storedProvider === "claude") {
-        setModel("claude-opus-4-6" as ModelId);
-      } else {
-        setModel("anthropic/claude-opus-4.6" as ModelId);
-      }
+    const claudeKey = localStorage.getItem("claude-api-key");
+    const openrouterKey = localStorage.getItem("openrouter-api-key");
+    
+    // Determine which provider to use
+    let provider = storedProvider;
+    if (!provider) {
+      // If no stored provider, prefer Claude if key exists, otherwise OpenRouter
+      provider = claudeKey ? "claude" : "openrouter";
     }
-    if (storedKey) setApiKey(storedKey);
+    
+    const keyForProvider = provider === "claude" ? claudeKey : openrouterKey;
+    
+    setApiProvider(provider);
+    if (keyForProvider) setApiKey(keyForProvider);
+    
+    // Set default model for the provider
+    if (provider === "claude") {
+      setModel("claude-opus-4-6" as ModelId);
+    } else {
+      setModel("anthropic/claude-opus-4.6" as ModelId);
+    }
   }, []);
 
   const setApiKeyWithStorage = useCallback((key: string, provider: "openrouter" | "claude") => {

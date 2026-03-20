@@ -76,24 +76,63 @@ export function ProjectPreview({ projectName, fileContents }: ProjectPreviewProp
     }
   };
 
-  const downloadProject = () => {
+  const selectLocalFolder = async () => {
+    try {
+      // Use File System Access API to let user select a folder
+      const dirHandle = await (window as any).showDirectoryPicker();
+      
+      // Try to start preview from the selected folder
+      // For now, show a message that they can run npm start in that folder
+      alert(`Selected folder: ${dirHandle.name}\n\nYou can now run:\nnpm install\nnpm start\n\nThen open http://localhost:3000 in your browser.`);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        // User cancelled
+        return;
+      }
+      console.error("Failed to select folder:", err);
+      alert("Failed to select folder. Make sure you're using a modern browser that supports the File System Access API.");
+    }
+  };
+
+  const downloadProject = async () => {
     if (!fileContents || fileContents.length === 0) {
       alert("No files to download. Generate a project first.");
       return;
     }
 
-    // Create a simple text file with all the code
-    const content = fileContents.map(f => 
-      `// FILE: ${f.path}\n${f.content}\n`
-    ).join("\n" + "=".repeat(80) + "\n\n");
+    try {
+      // Dynamically import JSZip
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
 
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${projectName}-files.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+      // Add files to zip with proper folder structure
+      for (const file of fileContents) {
+        zip.file(file.path, file.content);
+      }
+
+      // Generate zip blob
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${projectName}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to create ZIP:", err);
+      // Fallback to text file if JSZip fails
+      const content = fileContents.map(f => 
+        `// FILE: ${f.path}\n${f.content}\n`
+      ).join("\n" + "=".repeat(80) + "\n\n");
+
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${projectName}-files.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   const stopPreview = async () => {
@@ -192,6 +231,13 @@ export function ProjectPreview({ projectName, fileContents }: ProjectPreviewProp
               >
                 <Download size={14} />
                 Download Project Files
+              </button>
+              <button
+                onClick={() => selectLocalFolder()}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors"
+              >
+                <FolderOpen size={14} />
+                Open Local Folder
               </button>
               <p className="text-xs text-muted mt-2">
                 Then run: <code className="bg-surface px-1.5 py-0.5 rounded">npm install && npm start</code>

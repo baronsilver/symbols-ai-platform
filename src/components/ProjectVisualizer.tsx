@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FileTreeViewer } from "./FileTreeViewer";
 import { CodeViewer } from "./CodeViewer";
 import { ProjectPreview } from "./ProjectPreview";
-import { X, ExternalLink, Code2, Monitor } from "lucide-react";
+import { ChatMessage } from "./ChatMessage";
+import { X, ExternalLink, Code2, Monitor, Send, Loader, MessageSquare } from "lucide-react";
+import { Message } from "@/lib/types";
 
 interface ProjectVisualizerProps {
   projectName: string;
@@ -17,13 +19,124 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"code" | "preview">("code");
+  const [activeTab, setActiveTab] = useState<"code" | "preview" | "chat">("code");
+  const [isLocalFolder, setIsLocalFolder] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedFile) {
       loadFileContent(selectedFile);
     }
   }, [selectedFile]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMessageContent = chatInput;
+    setChatInput("");
+    
+    // Create user message with proper Message type
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: userMessageContent,
+      timestamp: Date.now(),
+    };
+    
+    // Create assistant message placeholder
+    const assistantMessage: Message = {
+      id: `assistant-${Date.now()}`,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      model: "claude-opus-4-6",
+    };
+    
+    setChatMessages((prev) => [...prev, userMessage]);
+    setChatLoading(true);
+    setStreamingMessageId(assistantMessage.id);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "x-api-provider": "claude",
+        },
+        body: JSON.stringify({
+          messages: chatMessages.map(m => ({ role: m.role, content: m.content })).concat([
+            { role: "user", content: userMessageContent },
+          ]),
+          model: "claude-opus-4-6",
+          autoMcp: true,
+          activeProject: projectName,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to get response");
+
+      // Add assistant message and stream into it
+      setChatMessages((prev) => [...prev, assistantMessage]);
+      setChatLoading(false);
+
+      const reader = res.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = "";
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() ?? "";
+          
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+            
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              
+              if (data.type === "text" && data.content) {
+                setChatMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessage.id
+                      ? { ...m, content: m.content + data.content }
+                      : m
+                  )
+                );
+              }
+            } catch {
+              // Skip non-JSON lines
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Chat error:", err);
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: `Sorry, I encountered an error: ${err instanceof Error ? err.message : "Unknown error"}`,
+        timestamp: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setChatLoading(false);
+      setStreamingMessageId(null);
+    }
+  };
 
   const loadFileContent = async (filePath: string) => {
     setLoading(true);
@@ -41,6 +154,29 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
       setFileContent(`// Error: ${err instanceof Error ? err.message : "Failed to load file"}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveFile = async (newContent: string) => {
+    if (!selectedFile) return;
+    try {
+      const res = await fetch("/api/files", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: selectedFile,
+          project: projectName,
+          content: newContent,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save file");
+      }
+
+      setFileContent(newContent);
+    } catch (err) {
+      throw err;
     }
   };
 
@@ -113,6 +249,17 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
                 <Monitor size={14} />
                 Preview
               </button>
+              <button
+                onClick={() => setActiveTab("chat")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors border-b-2 ${
+                  activeTab === "chat"
+                    ? "border-accent text-accent"
+                    : "border-transparent text-muted hover:text-foreground"
+                }`}
+              >
+                <Send size={14} />
+                AI Edit
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -124,7 +271,12 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
                       Loading...
                     </div>
                   ) : (
-                    <CodeViewer filePath={selectedFile} content={fileContent} />
+                    <CodeViewer 
+                      filePath={selectedFile} 
+                      content={fileContent}
+                      onSave={handleSaveFile}
+                      isEditable={true}
+                    />
                   )
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center px-4">
@@ -137,8 +289,62 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
                     </p>
                   </div>
                 )
-              ) : (
+              ) : activeTab === "preview" ? (
                 <ProjectPreview projectName={projectName} fileContents={fileContents} />
+              ) : (
+                <div className="flex flex-col h-full">
+                  {/* Chat Messages - Same style as main page */}
+                  <div className="flex-1 overflow-y-auto">
+                    {chatMessages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                        <MessageSquare size={24} className="text-accent mb-4" />
+                        <h3 className="text-sm font-semibold mb-1">Ask AI to edit your code</h3>
+                        <p className="text-xs text-muted max-w-sm">
+                          Ask the AI to make changes to your project. It will update files directly.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {chatMessages.map((msg) => (
+                          <ChatMessage key={msg.id} message={msg} />
+                        ))}
+                      </div>
+                    )}
+                    {chatLoading && (
+                      <div className="flex gap-3 px-4 py-5 bg-surface/40">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-surface-2 text-muted">
+                          <Loader size={16} className="animate-spin" />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-xs text-muted">Thinking...</span>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Chat Input */}
+                  <div className="border-t border-border p-3 bg-background/50">
+                    <form onSubmit={handleChatSubmit} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Ask AI to edit the code..."
+                        disabled={chatLoading}
+                        className="flex-1 px-3 py-2 text-xs rounded bg-surface border border-border text-foreground placeholder-muted outline-none focus:border-accent transition-colors disabled:opacity-50"
+                      />
+                      <button
+                        type="submit"
+                        disabled={chatLoading || !chatInput.trim()}
+                        className="px-3 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <Send size={12} />
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                </div>
               )}
             </div>
           </div>
