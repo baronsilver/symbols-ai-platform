@@ -64,42 +64,50 @@ export async function* streamChat(
       body.tools = mcpToolsToClaude(mcpTools);
     }
 
-    const res = await fetch(CLAUDE_API_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Claude error ${res.status}: ${err}`);
-    }
+    try {
+      const res = await fetch(CLAUDE_API_URL, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("No response body");
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data: ")) continue;
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") return;
-        yield data;
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Claude error ${res.status}: ${err}`);
       }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") return;
+          yield data;
+        }
+      }
+    } finally {
+      clearTimeout(timeout);
     }
   } else {
     // OpenRouter API format
@@ -116,43 +124,51 @@ export async function* streamChat(
       body.tool_choice = "auto";
     }
 
-    const res = await fetch(OPENROUTER_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://symbols-ai-platform.local",
-        "X-Title": "Symbols AI Platform",
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`OpenRouter error ${res.status}: ${err}`);
-    }
+    try {
+      const res = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://symbols-ai-platform.local",
+          "X-Title": "Symbols AI Platform",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("No response body");
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data: ")) continue;
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") return;
-        yield data;
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`OpenRouter error ${res.status}: ${err}`);
       }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") return;
+          yield data;
+        }
+      }
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

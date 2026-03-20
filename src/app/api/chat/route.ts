@@ -219,44 +219,89 @@ ${projectContext}`,
           toolCallBuffer = null;
           const isClaude = apiProvider === "claude";
 
-          for await (const chunk of streamChat(conv, model, apiKey!, mcpTools, apiProvider || "openrouter")) {
-            try {
-              const parsed = JSON.parse(chunk);
+          try {
+            for await (const chunk of streamChat(conv, model, apiKey!, mcpTools, apiProvider || "openrouter")) {
+              try {
+                const parsed = JSON.parse(chunk);
               
-              if (isClaude) {
-                // Claude API response format
-                const eventType = parsed.type;
-                
-                if (eventType === "content_block_delta") {
-                  const delta = parsed.delta;
-                  if (delta?.type === "text_delta" && delta?.text) {
-                    fullResponse += delta.text;
-                    send({ type: "text", content: delta.text });
-                  } else if (delta?.type === "input_json_delta" && delta?.partial_json) {
-                    // Tool call arguments streaming
-                    if (toolCallBuffer) {
-                      toolCallBuffer.arguments += delta.partial_json;
+                if (isClaude) {
+                  // Claude API response format
+                  const eventType = parsed.type;
+                  
+                  if (eventType === "content_block_delta") {
+                    const delta = parsed.delta;
+                    if (delta?.type === "text_delta" && delta?.text) {
+                      fullResponse += delta.text;
+                      send({ type: "text", content: delta.text });
+                    } else if (delta?.type === "input_json_delta" && delta?.partial_json) {
+                      // Tool call arguments streaming
+                      if (toolCallBuffer) {
+                        toolCallBuffer.arguments += delta.partial_json;
+                      }
                     }
-                  }
-                } else if (eventType === "content_block_start") {
-                  const contentBlock = parsed.content_block;
-                  if (contentBlock?.type === "tool_use") {
-                    // New tool call starting
-                    if (toolCallBuffer && toolCallBuffer.name) {
+                  } else if (eventType === "content_block_start") {
+                    const contentBlock = parsed.content_block;
+                    if (contentBlock?.type === "tool_use") {
+                      // New tool call starting
+                      if (toolCallBuffer && toolCallBuffer.name) {
+                        await processToolCall(conv, toolCallBuffer);
+                      }
+                      toolCallBuffer = {
+                        id: contentBlock.id,
+                        name: contentBlock.name,
+                        arguments: "",
+                      };
+                    }
+                  } else if (eventType === "message_delta") {
+                    const stopReason = parsed.delta?.stop_reason;
+                    if (stopReason === "tool_use" && toolCallBuffer) {
                       await processToolCall(conv, toolCallBuffer);
+                      toolCallBuffer = null;
+
+                      if (toolRound < maxToolRounds) {
+                        toolRound++;
+                        await runStream(conv);
+                        return;
+                      }
                     }
-                    toolCallBuffer = {
-                      id: contentBlock.id,
-                      name: contentBlock.name,
-                      arguments: "",
-                    };
                   }
-                } else if (eventType === "message_delta") {
-                  const stopReason = parsed.delta?.stop_reason;
-                  if (stopReason === "tool_use" && toolCallBuffer) {
+                } else {
+                  // OpenRouter/OpenAI response format
+                  const delta = parsed.choices?.[0]?.delta;
+                  const finishReason = parsed.choices?.[0]?.finish_reason;
+
+                  if (delta?.content) {
+                    fullResponse += delta.content;
+                    send({ type: "text", content: delta.content });
+                  }
+
+                  // Handle tool calls
+                  if (delta?.tool_calls) {
+                    for (const tc of delta.tool_calls) {
+                      if (tc.id) {
+                        // New tool call
+                        if (toolCallBuffer && toolCallBuffer.name) {
+                          // Process previous buffered tool call
+                          await processToolCall(conv, toolCallBuffer);
+                        }
+                        toolCallBuffer = {
+                          id: tc.id,
+                          name: tc.function?.name ?? "",
+                          arguments: tc.function?.arguments ?? "",
+                        };
+                      } else if (toolCallBuffer) {
+                        // Continue accumulating arguments
+                        if (tc.function?.name) toolCallBuffer.name += tc.function.name;
+                        if (tc.function?.arguments) toolCallBuffer.arguments += tc.function.arguments;
+                      }
+                    }
+                  }
+
+                  if (finishReason === "tool_calls" && toolCallBuffer) {
                     await processToolCall(conv, toolCallBuffer);
                     toolCallBuffer = null;
 
+                    // Continue the conversation with tool results
                     if (toolRound < maxToolRounds) {
                       toolRound++;
                       await runStream(conv);
@@ -264,53 +309,16 @@ ${projectContext}`,
                     }
                   }
                 }
-              } else {
-                // OpenRouter/OpenAI response format
-                const delta = parsed.choices?.[0]?.delta;
-                const finishReason = parsed.choices?.[0]?.finish_reason;
-
-                if (delta?.content) {
-                  fullResponse += delta.content;
-                  send({ type: "text", content: delta.content });
-                }
-
-                // Handle tool calls
-                if (delta?.tool_calls) {
-                  for (const tc of delta.tool_calls) {
-                    if (tc.id) {
-                      // New tool call
-                      if (toolCallBuffer && toolCallBuffer.name) {
-                        // Process previous buffered tool call
-                        await processToolCall(conv, toolCallBuffer);
-                      }
-                      toolCallBuffer = {
-                        id: tc.id,
-                        name: tc.function?.name ?? "",
-                        arguments: tc.function?.arguments ?? "",
-                      };
-                    } else if (toolCallBuffer) {
-                      // Continue accumulating arguments
-                      if (tc.function?.name) toolCallBuffer.name += tc.function.name;
-                      if (tc.function?.arguments) toolCallBuffer.arguments += tc.function.arguments;
-                    }
-                  }
-                }
-
-                if (finishReason === "tool_calls" && toolCallBuffer) {
-                  await processToolCall(conv, toolCallBuffer);
-                  toolCallBuffer = null;
-
-                  // Continue the conversation with tool results
-                  if (toolRound < maxToolRounds) {
-                    toolRound++;
-                    await runStream(conv);
-                    return;
-                  }
-                }
+              } catch {
+                // Non-JSON chunk, skip
               }
-            } catch {
-              // Non-JSON chunk, skip
             }
+          } catch (err) {
+            console.error("[chat] Stream error:", err instanceof Error ? err.message : err);
+            send({
+              type: "error",
+              content: err instanceof Error ? err.message : "Stream processing failed",
+            });
           }
         }
 
