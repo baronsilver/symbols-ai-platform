@@ -15,17 +15,32 @@ interface ProjectVisualizerProps {
   onClose: () => void;
 }
 
-export function ProjectVisualizer({ projectName, files, fileContents, onClose }: ProjectVisualizerProps) {
+export function ProjectVisualizer({ projectName: initialProjectName, files: initialFiles, fileContents: initialFileContents, onClose }: ProjectVisualizerProps) {
+  const [currentProjectName, setCurrentProjectName] = useState(initialProjectName);
+  const [currentFiles, setCurrentFiles] = useState(initialFiles);
+  const [currentFileContents, setCurrentFileContents] = useState(initialFileContents);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"code" | "preview" | "chat">("code");
   const [isLocalFolder, setIsLocalFolder] = useState(false);
+  const [localDirHandle, setLocalDirHandle] = useState<any>(null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+
+  // Handle local folder selection from ProjectPreview
+  const handleLocalFolderSelect = (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => {
+    setCurrentProjectName(folderName);
+    setCurrentFiles(files);
+    setCurrentFileContents(fileContents);
+    setIsLocalFolder(true);
+    setSelectedFile(null);
+    setFileContent("");
+    setActiveTab("code");
+  };
 
   useEffect(() => {
     if (selectedFile) {
@@ -66,6 +81,20 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
     setStreamingMessageId(assistantMessage.id);
 
     try {
+      // Build context with file contents for local folders
+      let contextMessage = "";
+      if (isLocalFolder && currentFileContents && currentFileContents.length > 0) {
+        contextMessage = `[LOCAL PROJECT: ${currentProjectName}]\nThe user is editing a local project. Here are the current files:\n\n`;
+        for (const file of currentFileContents) {
+          contextMessage += `**${file.path}**\n\`\`\`\n${file.content}\n\`\`\`\n\n`;
+        }
+        contextMessage += `\nWhen editing files, provide the complete updated file content. The user can save changes directly.`;
+      }
+
+      const messagesWithContext = contextMessage 
+        ? [{ role: "system", content: contextMessage }, ...chatMessages.map(m => ({ role: m.role, content: m.content })), { role: "user", content: userMessageContent }]
+        : chatMessages.map(m => ({ role: m.role, content: m.content })).concat([{ role: "user", content: userMessageContent }]);
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { 
@@ -73,12 +102,10 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
           "x-api-provider": "claude",
         },
         body: JSON.stringify({
-          messages: chatMessages.map(m => ({ role: m.role, content: m.content })).concat([
-            { role: "user", content: userMessageContent },
-          ]),
+          messages: messagesWithContext,
           model: "claude-opus-4-6",
-          autoMcp: true,
-          activeProject: projectName,
+          autoMcp: !isLocalFolder, // Disable MCP for local folders since we have the content
+          activeProject: isLocalFolder ? undefined : currentProjectName,
         }),
       });
 
@@ -141,8 +168,19 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
   const loadFileContent = async (filePath: string) => {
     setLoading(true);
     try {
+      // If we have local file contents, use them directly
+      if (currentFileContents) {
+        const file = currentFileContents.find(f => f.path === filePath);
+        if (file) {
+          setFileContent(file.content);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Otherwise fetch from API
       const res = await fetch(
-        `/api/files?path=${encodeURIComponent(filePath)}&project=${encodeURIComponent(projectName)}`
+        `/api/files?path=${encodeURIComponent(filePath)}&project=${encodeURIComponent(currentProjectName)}`
       );
       const data = await res.json();
       if (data.content) {
@@ -160,12 +198,22 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
   const handleSaveFile = async (newContent: string) => {
     if (!selectedFile) return;
     try {
+      // If working with local folder, update the local file contents
+      if (isLocalFolder && currentFileContents) {
+        setCurrentFileContents(prev => 
+          prev?.map(f => f.path === selectedFile ? { ...f, content: newContent } : f)
+        );
+        setFileContent(newContent);
+        return;
+      }
+      
+      // Otherwise save via API
       const res = await fetch("/api/files", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path: selectedFile,
-          project: projectName,
+          project: currentProjectName,
           content: newContent,
         }),
       });
@@ -182,7 +230,7 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
 
   const handleOpenInExplorer = () => {
     // This would need a backend endpoint to open the folder
-    alert(`Project location: output/${projectName}`);
+    alert(`Project location: ${isLocalFolder ? currentProjectName : `output/${currentProjectName}`}`);
   };
 
   return (
@@ -192,7 +240,7 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div>
             <h2 className="text-sm font-semibold">Project Visualizer</h2>
-            <p className="text-xs text-muted">{projectName}</p>
+            <p className="text-xs text-muted">{currentProjectName}{isLocalFolder ? " (Local)" : ""}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -216,8 +264,8 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
           {/* File Tree */}
           <div className="w-64 border-r border-border bg-background/50">
             <FileTreeViewer
-              files={files}
-              projectPath={projectName}
+              files={currentFiles}
+              projectPath={currentProjectName}
               onFileSelect={setSelectedFile}
               selectedFile={selectedFile}
             />
@@ -290,7 +338,7 @@ export function ProjectVisualizer({ projectName, files, fileContents, onClose }:
                   </div>
                 )
               ) : activeTab === "preview" ? (
-                <ProjectPreview projectName={projectName} fileContents={fileContents} />
+                <ProjectPreview projectName={currentProjectName} fileContents={currentFileContents} onLocalFolderSelect={handleLocalFolderSelect} />
               ) : (
                 <div className="flex flex-col h-full">
                   {/* Chat Messages - Same style as main page */}

@@ -106,6 +106,70 @@ export function parseGeneratedFiles(text: string): GeneratedFile[] {
 }
 
 /**
+ * Get the essential root files needed to run a Symbols project as GeneratedFile objects.
+ * This allows them to be included in client downloads even when filesystem is read-only.
+ */
+export function getEssentialProjectFiles(): GeneratedFile[] {
+  return [
+    {
+      path: "index.html",
+      content: `<html background="#000">
+  <head>
+    <title>Symbols App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>
+`
+    },
+    {
+      path: "index.js",
+      content: `'use strict'\n\nimport { create } from 'smbls'\nimport * as app from './smbls'\n\ncreate({}, app)\n`
+    },
+    {
+      path: "package.json",
+      content: JSON.stringify({
+        name: "symbols-project",
+        version: "1.0.0",
+        private: true,
+        scripts: {
+          start: "parcel index.html",
+          build: "parcel build index.html"
+        },
+        dependencies: {
+          smbls: "latest",
+          "@supabase/supabase-js": "^2.45.0"
+        },
+        devDependencies: {
+          "@babel/core": "^7.16.0",
+          "@babel/preset-env": "^7.16.4",
+          "@parcel/babel-preset-env": "^2.0.1",
+          "@parcel/transformer-inline-string": "^2.9.1",
+          "@parcel/transformer-raw": "^2.9.1",
+          "buffer": "^6.0.3",
+          "parcel": "^2.13.0"
+        }
+      }, null, 2)
+    },
+    {
+      path: ".parcelrc",
+      content: JSON.stringify({
+        extends: "@parcel/config-default",
+        transformers: {
+          "*.woff2": ["@parcel/transformer-raw"],
+          "*.otf": ["@parcel/transformer-raw"],
+          "*.svg": ["@parcel/transformer-inline-string"]
+        }
+      }, null, 2)
+    }
+  ];
+}
+
+/**
  * Create the essential root files needed to run a Symbols project.
  * All files are created inline - no copying needed.
  */

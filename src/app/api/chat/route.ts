@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { callMcpTool, listMcpTools } from "@/lib/mcp-client";
 import { streamChat, OpenRouterMessage, McpToolDef } from "@/lib/openrouter";
-import { parseGeneratedFiles, writeGeneratedFiles, readProjectFiles } from "@/lib/file-writer";
+import { parseGeneratedFiles, writeGeneratedFiles, readProjectFiles, getEssentialProjectFiles } from "@/lib/file-writer";
 import { getSymbolsContext } from "@/lib/symbols-context";
 import { saveContext, loadContext, getContextSummary, clearContext, AgentContext } from "@/lib/agent-context";
 
@@ -449,12 +449,20 @@ ${projectContext}`,
           // Try to write files to disk (may fail on read-only filesystems like Railway)
           const written = await writeGeneratedFiles(files, finalProjectName);
           
+          // Get essential project files (package.json, index.html, index.js, .parcelrc)
+          // These are needed to run the project but may not be written on read-only filesystems
+          const essentialFiles = getEssentialProjectFiles();
+          
+          // Combine AI-generated files with essential files for complete project
+          const allFileContents = [...essentialFiles, ...files];
+          const allFilePaths = [...essentialFiles.map(f => f.path), ...written];
+          
           // Send full file contents to client so it can handle storage
           send({ 
             type: "files", 
             projectName: finalProjectName, 
-            files: written,
-            fileContents: files // Include full file contents for client-side storage
+            files: allFilePaths,
+            fileContents: allFileContents // Include ALL files for client-side storage/download
           });
         }
 

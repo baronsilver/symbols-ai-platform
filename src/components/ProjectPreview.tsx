@@ -6,9 +6,10 @@ import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen 
 interface ProjectPreviewProps {
   projectName: string;
   fileContents?: Array<{ path: string; content: string }>;
+  onLocalFolderSelect?: (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => void;
 }
 
-export function ProjectPreview({ projectName, fileContents }: ProjectPreviewProps) {
+export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect }: ProjectPreviewProps) {
   const [status, setStatus] = useState<"stopped" | "starting" | "running" | "error" | "unavailable">("stopped");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +82,49 @@ export function ProjectPreview({ projectName, fileContents }: ProjectPreviewProp
       // Use File System Access API to let user select a folder
       const dirHandle = await (window as any).showDirectoryPicker();
       
-      // Try to start preview from the selected folder
-      // For now, show a message that they can run npm start in that folder
-      alert(`Selected folder: ${dirHandle.name}\n\nYou can now run:\nnpm install\nnpm start\n\nThen open http://localhost:3000 in your browser.`);
+      // Recursively read all files from the folder
+      const files: string[] = [];
+      const fileContentsArray: Array<{ path: string; content: string }> = [];
+      
+      async function readDirectory(handle: any, path: string = "") {
+        for await (const entry of handle.values()) {
+          const entryPath = path ? `${path}/${entry.name}` : entry.name;
+          
+          if (entry.kind === "file") {
+            // Skip node_modules and hidden files
+            if (entryPath.includes("node_modules") || entry.name.startsWith(".")) {
+              continue;
+            }
+            
+            try {
+              const file = await entry.getFile();
+              const content = await file.text();
+              files.push(entryPath);
+              fileContentsArray.push({ path: entryPath, content });
+            } catch (e) {
+              console.warn(`Could not read file: ${entryPath}`, e);
+            }
+          } else if (entry.kind === "directory") {
+            // Skip node_modules and hidden directories
+            if (entry.name === "node_modules" || entry.name.startsWith(".")) {
+              continue;
+            }
+            await readDirectory(entry, entryPath);
+          }
+        }
+      }
+      
+      await readDirectory(dirHandle);
+      
+      if (files.length === 0) {
+        alert("No files found in the selected folder.");
+        return;
+      }
+      
+      // Call the callback to update the visualizer
+      if (onLocalFolderSelect) {
+        onLocalFolderSelect(dirHandle.name, files, fileContentsArray);
+      }
     } catch (err) {
       if ((err as Error).name === "AbortError") {
         // User cancelled
