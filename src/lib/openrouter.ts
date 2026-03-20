@@ -65,7 +65,7 @@ export async function* streamChat(
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    const timeout = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
     try {
       const res = await fetch(CLAUDE_API_URL, {
@@ -125,7 +125,7 @@ export async function* streamChat(
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    const timeout = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
     try {
       const res = await fetch(OPENROUTER_API_URL, {
