@@ -8,7 +8,7 @@ import { createServer } from "http";
 const execAsync = promisify(exec);
 
 // Store running dev servers: project name -> { port, server }
-const runningServers = new Map<string, { port: number; server: any }>();
+export const runningServers = new Map<string, { port: number; server: any }>();
 
 // Find an available port starting from 3001
 async function getAvailablePort(startPort = 3001): Promise<number> {

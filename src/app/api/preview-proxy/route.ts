@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runningServers } from "../preview-server/route";
 
 // Proxy requests to the local preview server
 // GET /api/preview-proxy?project=X&path=/index.html -> proxies to http://127.0.0.1:PORT/index.html
@@ -10,18 +11,13 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Missing project parameter", { status: 400 });
   }
 
-  // Get the server port from the preview-server API
-  const statusRes = await fetch(`http://127.0.0.1:3000/api/preview-server?project=${encodeURIComponent(projectName)}`);
-  if (!statusRes.ok) {
-    return new NextResponse("Server not found", { status: 404 });
+  // Get the server port from the in-memory map
+  const serverInfo = runningServers.get(projectName);
+  if (!serverInfo) {
+    return new NextResponse("Server not running. Click Start Preview first.", { status: 503 });
   }
 
-  const statusData = await statusRes.json();
-  if (!statusData.running) {
-    return new NextResponse("Server not running", { status: 503 });
-  }
-
-  const port = statusData.port;
+  const port = serverInfo.port;
   const targetUrl = `http://127.0.0.1:${port}${requestPath}`;
 
   try {
@@ -43,6 +39,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("Proxy error:", err);
-    return new NextResponse("Proxy error", { status: 502 });
+    return new NextResponse("Proxy error: " + (err instanceof Error ? err.message : String(err)), { status: 502 });
   }
 }
