@@ -2,118 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-// Build preview HTML served from same origin via /api/preview-html.
-// Uses importmap for CDN packages + runtime blob URL loader for local files.
-// Since this HTML is served from the real origin (not blob:), pushState works.
-function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>): string {
-  // Collect JS files for the virtual file system
+// Extract JS files from project file contents for the preview API
+function extractJsFiles(fileContents: Array<{ path: string; content: string }>): Record<string, string> {
   const jsFiles: Record<string, string> = {};
   for (const file of fileContents) {
     if (file.path.endsWith(".js") || file.path.endsWith(".mjs")) {
       jsFiles[file.path] = file.content;
     }
   }
-
-  // Collect bare specifiers used in project files for the importmap
-  const bareSpecifiers = new Set<string>();
-  for (const source of Object.values(jsFiles)) {
-    const regex = /(?:import|export)\s+.*?from\s+['"]([^'"./][^'"]*)['"]/g;
-    let m;
-    while ((m = regex.exec(source)) !== null) {
-      bareSpecifiers.add(m[1]);
-    }
-  }
-
-  // Build importmap entries: all bare specifiers -> esm.sh with ?bundle
-  const importmapEntries: Record<string, string> = {};
-  for (const spec of bareSpecifiers) {
-    importmapEntries[spec] = `https://esm.sh/${spec}?bundle`;
-  }
-  const importmapJson = JSON.stringify({ imports: importmapEntries }, null, 2);
-
-  // Embed all JS files as a JSON blob for the runtime loader
-  const filesJson = JSON.stringify(jsFiles);
-
-  // The runtime loader inside the iframe:
-  // 1. Reads JS files from embedded JSON
-  // 2. Resolves relative imports to blob URLs (created in iframe context)
-  // 3. Bare specifiers are handled by the importmap
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Symbols Preview</title>
-  <script type="importmap">${importmapJson}</script>
-  <style>
-    body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
-    .preview-error { padding: 20px; color: #f87171; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
-    .preview-loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #71717a; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <div id="preview-loading" class="preview-loading">Loading preview...</div>
-  <script id="preview-files" type="application/json">${filesJson}</script>
-  <script type="module">
-    const FILES = JSON.parse(document.getElementById('preview-files').textContent);
-    const fileKeys = new Set(Object.keys(FILES));
-    const blobCache = {};
-
-    function resolvePath(from, to) {
-      if (!to.startsWith('.')) return to;
-      const parts = from.split('/').slice(0, -1);
-      for (const seg of to.split('/')) {
-        if (seg === '..') parts.pop();
-        else if (seg !== '.') parts.push(seg);
-      }
-      let r = parts.join('/');
-      if (!fileKeys.has(r) && !r.endsWith('.js')) {
-        if (fileKeys.has(r + '.js')) r += '.js';
-        else if (fileKeys.has(r + '/index.js')) r += '/index.js';
-      }
-      return r;
-    }
-
-    async function toBlobUrl(filePath) {
-      if (blobCache[filePath]) return blobCache[filePath];
-      let src = FILES[filePath];
-      if (!src) {
-        const b = new Blob(['export default {}'], {type:'application/javascript'});
-        return blobCache[filePath] = URL.createObjectURL(b);
-      }
-      // Find relative imports and resolve them to blob URLs first
-      const relImports = [];
-      src.replace(/(?:import|export)\\s+(?:[\\s\\S]*?from\\s+)?['"](\\.[^'"]+)['"]/g, (_, s) => {
-        relImports.push(s);
-      });
-      for (const spec of relImports) {
-        const resolved = resolvePath(filePath, spec);
-        const url = await toBlobUrl(resolved);
-        // Replace the specifier with the blob URL
-        src = src.split("'" + spec + "'").join("'" + url + "'");
-        src = src.split('"' + spec + '"').join('"' + url + '"');
-      }
-      const b = new Blob([src], {type:'application/javascript'});
-      return blobCache[filePath] = URL.createObjectURL(b);
-    }
-
-    try {
-      const entry = FILES['index.js'] ? 'index.js' : Object.keys(FILES).find(f => f.endsWith('index.js')) || Object.keys(FILES)[0];
-      if (!entry) throw new Error('No entry file found');
-      const url = await toBlobUrl(entry);
-      document.getElementById('preview-loading')?.remove();
-      await import(url);
-    } catch(e) {
-      console.error('Preview error:', e);
-      document.getElementById('preview-loading')?.remove();
-      const d = document.createElement('div');
-      d.className = 'preview-error';
-      d.textContent = 'Preview Error:\\n' + e.message + '\\n\\n' + (e.stack || '');
-      document.body.appendChild(d);
-    }
-  </script>
-</body>
-</html>`;
+  return jsFiles;
 }
 
 interface ProjectPreviewProps {
@@ -143,7 +40,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   }, [projectName]);
 
-  // Push preview HTML to API route, then load via same-origin iframe
+  // Send JS files to API route, then load preview via same-origin iframe
   const startSameOriginPreview = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
@@ -154,15 +51,14 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     setError(null);
 
     try {
-      const html = buildPreviewHtml(fileContents);
+      const files = extractJsFiles(fileContents);
       const res = await fetch("/api/preview-html", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, html }),
+        body: JSON.stringify({ projectName, files }),
       });
-      if (!res.ok) throw new Error("Failed to store preview HTML");
+      if (!res.ok) throw new Error("Failed to store preview files");
 
-      // Load the preview from same-origin API route (cache-bust with timestamp)
       setPreviewIframeUrl(`/api/preview-html?project=${encodeURIComponent(projectName)}&t=${Date.now()}`);
       setStatus("running");
     } catch (err) {
@@ -181,11 +77,11 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
 
     try {
-      const html = buildPreviewHtml(fileContents);
+      const files = extractJsFiles(fileContents);
       await fetch("/api/preview-html", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, html }),
+        body: JSON.stringify({ projectName, files }),
       });
       window.open(`/api/preview-html?project=${encodeURIComponent(projectName)}&t=${Date.now()}`, "_blank");
     } catch (err) {
