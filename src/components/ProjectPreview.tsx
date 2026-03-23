@@ -2,15 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-// Extract JS files from project file contents for the preview API
-function extractJsFiles(fileContents: Array<{ path: string; content: string }>): Record<string, string> {
-  const jsFiles: Record<string, string> = {};
+// Extract all project files for the preview server
+function extractAllFiles(fileContents: Array<{ path: string; content: string }>): Record<string, string> {
+  const allFiles: Record<string, string> = {};
   for (const file of fileContents) {
-    if (file.path.endsWith(".js") || file.path.endsWith(".mjs")) {
-      jsFiles[file.path] = file.content;
-    }
+    allFiles[file.path] = file.content;
   }
-  return jsFiles;
+  return allFiles;
 }
 
 interface ProjectPreviewProps {
@@ -51,15 +49,16 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     setError(null);
 
     try {
-      const files = extractJsFiles(fileContents);
-      const res = await fetch("/api/preview-html", {
+      const files = extractAllFiles(fileContents);
+      const res = await fetch("/api/preview-server", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectName, files }),
       });
-      if (!res.ok) throw new Error("Failed to store preview files");
+      if (!res.ok) throw new Error("Failed to start preview server");
 
-      setPreviewIframeUrl(`/api/preview-html?project=${encodeURIComponent(projectName)}&t=${Date.now()}`);
+      const data = await res.json();
+      setPreviewIframeUrl(`/api/preview-proxy?project=${encodeURIComponent(projectName)}&path=/`);
       setStatus("running");
     } catch (err) {
       console.error("Failed to start preview:", err);
@@ -77,13 +76,13 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
 
     try {
-      const files = extractJsFiles(fileContents);
-      await fetch("/api/preview-html", {
+      const files = extractAllFiles(fileContents);
+      await fetch("/api/preview-server", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectName, files }),
       });
-      window.open(`/api/preview-html?project=${encodeURIComponent(projectName)}&t=${Date.now()}`, "_blank");
+      window.open(`/api/preview-proxy?project=${encodeURIComponent(projectName)}&path=/`, "_blank");
     } catch (err) {
       console.error("Failed to open preview:", err);
       setError(err instanceof Error ? err.message : "Failed to open preview");
@@ -260,10 +259,22 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
   };
 
   // Close/reset embedded preview
-  const closeSandbox = () => {
+  const closeSandbox = async () => {
+    try {
+      await fetch(`/api/preview-server?project=${encodeURIComponent(projectName)}`, { method: "DELETE" });
+    } catch (err) {
+      console.error("Failed to stop preview server:", err);
+    }
     setPreviewIframeUrl(null);
     setStatus("unavailable");
   };
+
+  // Cleanup preview server on unmount
+  useEffect(() => {
+    return () => {
+      fetch(`/api/preview-server?project=${encodeURIComponent(projectName)}`, { method: "DELETE" }).catch(() => {});
+    };
+  }, [projectName]);
 
   return (
     <div className="flex flex-col h-full">
