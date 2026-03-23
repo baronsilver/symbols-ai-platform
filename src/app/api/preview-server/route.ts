@@ -105,13 +105,8 @@ export async function POST(request: NextRequest) {
       await fs.writeFile(fullPath, content, "utf-8");
     }
 
-    // Run npm install
-    try {
-      await execAsync("npm install", { cwd: tempDir, timeout: 60000 });
-    } catch (err) {
-      console.error("npm install failed:", err);
-      // Continue anyway — some deps might not be critical
-    }
+    // Skip npm install — smbls from esm.sh CDN already bundles all dependencies
+    // No native compilation needed
 
     // Start a simple HTTP server
     const port = await getAvailablePort();
