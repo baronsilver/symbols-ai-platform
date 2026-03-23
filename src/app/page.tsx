@@ -19,6 +19,7 @@ import {
   Zap,
   Settings,
   X,
+  Code2,
 } from "lucide-react";
 import Image from "next/image";
 import { useRef, useEffect, useState } from "react";
@@ -97,6 +98,17 @@ export default function Home() {
                 currentProject={selectedProject?.name || null}
               />
             </div>
+
+            {displayProject && (
+              <button
+                onClick={() => setShowVisualizer(true)}
+                className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors flex items-center gap-1.5"
+                title={`Open ${"projectName" in displayProject ? displayProject.projectName : displayProject.name}`}
+              >
+                <Code2 size={14} />
+                Open Project
+              </button>
+            )}
 
             <ModelSelector
               value={model}
