@@ -2,15 +2,137 @@
 
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-import sdk from "@stackblitz/sdk";
+// Build a self-contained HTML preview that loads smbls from CDN
+// and inlines all project JS files as a virtual module system
+function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>): string {
+  // Collect JS files for inlining as virtual modules
+  const jsFiles: Record<string, string> = {};
+  let customIndexHtml: string | null = null;
 
-// Build StackBlitz project files from generated file contents
-function buildStackBlitzFiles(fileContents: Array<{ path: string; content: string }>): Record<string, string> {
-  const files: Record<string, string> = {};
   for (const file of fileContents) {
-    files[file.path] = file.content;
+    if (file.path === "index.html") {
+      customIndexHtml = file.content;
+    } else if (file.path.endsWith(".js") || file.path.endsWith(".mjs")) {
+      jsFiles[file.path] = file.content;
+    }
   }
-  return files;
+
+  // Build a JSON map of all JS file contents for the virtual module loader
+  const fileMapJson = JSON.stringify(jsFiles);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Symbols Preview</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+    .preview-error { padding: 20px; color: #f87171; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+    .preview-loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #71717a; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="preview-loading">Loading preview...</div>
+  <script>
+    // Virtual file system and module loader
+    (function() {
+      const FILES = ${fileMapJson};
+
+      // Resolve relative paths
+      function resolvePath(from, to) {
+        if (!to.startsWith('.')) return to;
+        const fromParts = from.split('/').slice(0, -1);
+        const toParts = to.split('/');
+        for (const part of toParts) {
+          if (part === '..') fromParts.pop();
+          else if (part !== '.') fromParts.push(part);
+        }
+        let resolved = fromParts.join('/');
+        // Try with .js extension if not found
+        if (!FILES[resolved] && !resolved.endsWith('.js')) {
+          if (FILES[resolved + '.js']) resolved += '.js';
+          else if (FILES[resolved + '/index.js']) resolved += '/index.js';
+        }
+        return resolved;
+      }
+
+      // Rewrite imports in source code to use blob URLs
+      const blobUrlCache = {};
+
+      async function createBlobUrl(filePath) {
+        if (blobUrlCache[filePath]) return blobUrlCache[filePath];
+
+        let source = FILES[filePath];
+        if (!source) {
+          console.warn('File not found:', filePath);
+          // Return empty module
+          const blob = new Blob(['export default {}'], { type: 'application/javascript' });
+          const url = URL.createObjectURL(blob);
+          blobUrlCache[filePath] = url;
+          return url;
+        }
+
+        // Find all import statements and rewrite them
+        const importRegex = /(?:import\s+.*?from\s+['"])([^'"]+)(['"])|(?:import\s*\(['"])([^'"]+)(['"]\s*\))|(?:export\s+.*?from\s+['"])([^'"]+)(['"])/g;
+        const imports = [];
+        let match;
+
+        while ((match = importRegex.exec(source)) !== null) {
+          const specifier = match[1] || match[3] || match[5];
+          imports.push(specifier);
+        }
+
+        // Pre-create blob URLs for all local imports
+        const urlMap = {};
+        for (const spec of imports) {
+          if (spec.startsWith('.')) {
+            const resolved = resolvePath(filePath, spec);
+            urlMap[spec] = await createBlobUrl(resolved);
+          } else if (spec === 'smbls') {
+            urlMap[spec] = 'https://unpkg.com/smbls@3/index.js';
+          }
+          // Other bare specifiers left as-is (will fail but that's expected)
+        }
+
+        // Replace import specifiers with blob URLs using simple string replace
+        let rewritten = source;
+        for (const [spec, url] of Object.entries(urlMap)) {
+          // Replace both single and double quoted variants
+          rewritten = rewritten.split("'" + spec + "'").join("'" + url + "'");
+          rewritten = rewritten.split('"' + spec + '"').join('"' + url + '"');
+        }
+
+        const blob = new Blob([rewritten], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        blobUrlCache[filePath] = url;
+        return url;
+      }
+
+      // Start the app
+      async function boot() {
+        try {
+          const entryFile = FILES['index.js'] ? 'index.js' : Object.keys(FILES).find(f => f.endsWith('index.js')) || Object.keys(FILES)[0];
+          if (!entryFile) throw new Error('No entry file found');
+
+          const entryUrl = await createBlobUrl(entryFile);
+          document.getElementById('loading').remove();
+          await import(entryUrl);
+        } catch(e) {
+          console.error('Preview error:', e);
+          document.getElementById('loading')?.remove();
+          const div = document.createElement('div');
+          div.className = 'preview-error';
+          div.textContent = 'Preview Error:\\n' + e.message + '\\n\\n' + (e.stack || '');
+          document.body.appendChild(div);
+        }
+      }
+
+      boot();
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 interface ProjectPreviewProps {
@@ -24,9 +146,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeployed, setIsDeployed] = useState(false);
-  const [stackblitzEmbedded, setStackblitzEmbedded] = useState(false);
+  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
   const [sandboxLoading, setSandboxLoading] = useState(false);
-  const stackblitzContainerRef = useState<string>(`stackblitz-${Date.now()}`)[0];
 
   useEffect(() => {
     // Check if we're in a deployed environment (no localhost)
@@ -41,8 +162,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   }, [projectName]);
 
-  // Embed StackBlitz preview inline
-  const embedStackBlitz = async () => {
+  // Build and show inline blob preview
+  const startBlobPreview = () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
@@ -52,54 +173,36 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     setError(null);
 
     try {
-      const files = buildStackBlitzFiles(fileContents);
-      await sdk.embedProject(
-        stackblitzContainerRef,
-        {
-          title: projectName,
-          description: "Symbols Project Preview",
-          template: "node",
-          files,
-        },
-        {
-          height: "100%",
-          openFile: "index.js",
-          view: "preview",
-          hideNavigation: true,
-          hideDevTools: true,
-          theme: "dark",
-        }
-      );
-      setStackblitzEmbedded(true);
+      // Revoke previous blob URL
+      if (blobPreviewUrl) URL.revokeObjectURL(blobPreviewUrl);
+
+      const html = buildPreviewHtml(fileContents);
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      setBlobPreviewUrl(url);
       setStatus("running");
     } catch (err) {
-      console.error("Failed to embed StackBlitz:", err);
+      console.error("Failed to build preview:", err);
       setError(err instanceof Error ? err.message : "Failed to start preview");
     } finally {
       setSandboxLoading(false);
     }
   };
 
-  // Open StackBlitz in new tab
-  const openInNewStackBlitz = async () => {
+  // Open preview in new tab
+  const openPreviewInNewTab = () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
     }
 
     try {
-      const files = buildStackBlitzFiles(fileContents);
-      sdk.openProject(
-        {
-          title: projectName,
-          description: "Symbols Project Preview",
-          template: "node",
-          files,
-        },
-        { openFile: "index.js", view: "preview" }
-      );
+      const html = buildPreviewHtml(fileContents);
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
     } catch (err) {
-      console.error("Failed to open StackBlitz:", err);
+      console.error("Failed to open preview:", err);
       setError(err instanceof Error ? err.message : "Failed to open preview");
     }
   };
@@ -275,11 +378,9 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
 
   // Close/reset embedded preview
   const closeSandbox = () => {
-    setStackblitzEmbedded(false);
+    if (blobPreviewUrl) URL.revokeObjectURL(blobPreviewUrl);
+    setBlobPreviewUrl(null);
     setStatus("unavailable");
-    // Clear the container
-    const container = document.getElementById(stackblitzContainerRef);
-    if (container) container.innerHTML = "";
   };
 
   return (
@@ -287,8 +388,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
       {/* Controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold">{isDeployed ? "StackBlitz Preview" : "Live Preview"}</span>
-          {(status === "running" || stackblitzEmbedded) && (
+          <span className="text-xs font-semibold">{isDeployed ? "Browser Preview" : "Live Preview"}</span>
+          {(status === "running" || blobPreviewUrl) && (
             <span className="flex items-center gap-1 text-xs text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
               Running
@@ -304,10 +405,10 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
         <div className="flex items-center gap-2">
           {/* Deployed environment controls */}
           {isDeployed ? (
-            stackblitzEmbedded ? (
+            blobPreviewUrl ? (
               <>
                 <button
-                  onClick={openInNewStackBlitz}
+                  onClick={openPreviewInNewTab}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
                 >
                   <ExternalLink size={12} />
@@ -323,7 +424,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
               </>
             ) : (
               <button
-                onClick={embedStackBlitz}
+                onClick={startBlobPreview}
                 disabled={sandboxLoading || !fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
@@ -382,18 +483,18 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
 
       {/* Preview Area */}
       <div className="flex-1 bg-surface relative">
-        {status === "unavailable" && !stackblitzEmbedded && (
+        {status === "unavailable" && !blobPreviewUrl && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mb-4">
               <Code2 size={24} className="text-accent" />
             </div>
             <h3 className="text-sm font-semibold mb-1">Preview Your Project</h3>
             <p className="text-xs text-muted max-w-sm mb-4">
-              Open your project in StackBlitz to preview it live, or download the files to run locally.
+              Preview your project directly in the browser, or download the files to run locally.
             </p>
             <div className="flex flex-col gap-2">
               <button
-                onClick={embedStackBlitz}
+                onClick={startBlobPreview}
                 disabled={sandboxLoading || !fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
@@ -405,12 +506,12 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
                 ) : (
                   <>
                     <Play size={14} />
-                    Preview in StackBlitz
+                    Start Preview
                   </>
                 )}
               </button>
               <button
-                onClick={openInNewStackBlitz}
+                onClick={openPreviewInNewTab}
                 disabled={!fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors disabled:opacity-50"
               >
@@ -487,11 +588,13 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
           />
         )}
 
-        {/* StackBlitz embed container for deployed environment */}
-        {isDeployed && (
-          <div
-            id={stackblitzContainerRef}
-            className={`w-full h-full ${stackblitzEmbedded ? '' : 'hidden'}`}
+        {/* Blob URL preview iframe for deployed environment */}
+        {blobPreviewUrl && isDeployed && (
+          <iframe
+            src={blobPreviewUrl}
+            className="w-full h-full border-0"
+            title="Browser Preview"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
         )}
       </div>
