@@ -20,6 +20,7 @@ import {
   Settings,
   X,
   Code2,
+  FolderOpen,
 } from "lucide-react";
 import Image from "next/image";
 import { useRef, useEffect, useState } from "react";
@@ -61,9 +62,60 @@ export default function Home() {
   }, [messages, toolActivity]);
 
   const hasMessages = messages.length > 0;
+  const [localFolderProject, setLocalFolderProject] = useState<{
+    projectName: string;
+    files: string[];
+    fileContents: Array<{ path: string; content: string }>;
+  } | null>(null);
+
+  const openLocalFolder = async () => {
+    try {
+      const dirHandle = await (window as any).showDirectoryPicker();
+      const files: string[] = [];
+      const fileContents: Array<{ path: string; content: string }> = [];
+
+      async function readDirectory(handle: any, path: string = "") {
+        for await (const entry of handle.values()) {
+          const entryPath = path ? `${path}/${entry.name}` : entry.name;
+          if (entry.kind === "file") {
+            if (entryPath.includes("node_modules") || entry.name.startsWith(".")) continue;
+            try {
+              const file = await entry.getFile();
+              const content = await file.text();
+              files.push(entryPath);
+              fileContents.push({ path: entryPath, content });
+            } catch (e) {
+              console.warn(`Could not read file: ${entryPath}`, e);
+            }
+          } else if (entry.kind === "directory") {
+            if (entry.name === "node_modules" || entry.name.startsWith(".") || entry.name === ".git") continue;
+            await readDirectory(entry, entryPath);
+          }
+        }
+      }
+
+      await readDirectory(dirHandle);
+
+      if (files.length === 0) {
+        alert("No files found in the selected folder.");
+        return;
+      }
+
+      setLocalFolderProject({
+        projectName: dirHandle.name,
+        files,
+        fileContents,
+      });
+      setShowVisualizer(true);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      console.error("Failed to open folder:", err);
+      alert("Failed to open folder. Make sure you're using a browser that supports the File System Access API.");
+    }
+  };
 
   // Determine which project to display in the visualizer
-  const displayProject = selectedProject || generatedFiles;
+  const displayProject = localFolderProject || selectedProject || generatedFiles;
 
   return (
     <div className="flex flex-col h-screen">
@@ -99,16 +151,14 @@ export default function Home() {
               />
             </div>
 
-            {displayProject && (
-              <button
-                onClick={() => setShowVisualizer(true)}
-                className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors flex items-center gap-1.5"
-                title={`Open ${"projectName" in displayProject ? displayProject.projectName : displayProject.name}`}
-              >
-                <Code2 size={14} />
-                Open Project
-              </button>
-            )}
+            <button
+              onClick={openLocalFolder}
+              className="px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors flex items-center gap-1.5"
+              title="Open a local project folder"
+            >
+              <FolderOpen size={14} />
+              Open Project
+            </button>
 
             <ModelSelector
               value={model}
@@ -377,6 +427,7 @@ ${code}
           onClose={() => {
             setShowVisualizer(false);
             setSelectedProject(null);
+            setLocalFolderProject(null);
           }}
         />
       )}
