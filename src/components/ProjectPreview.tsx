@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen } from "lucide-react";
+import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
+import { getParameters } from "codesandbox/lib/api/define";
 
 interface ProjectPreviewProps {
   projectName: string;
@@ -14,6 +15,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeployed, setIsDeployed] = useState(false);
+  const [sandboxUrl, setSandboxUrl] = useState<string | null>(null);
+  const [sandboxLoading, setSandboxLoading] = useState(false);
 
   useEffect(() => {
     // Check if we're in a deployed environment (no localhost)
@@ -27,6 +30,62 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
       setStatus("unavailable");
     }
   }, [projectName]);
+
+  // Create CodeSandbox from project files
+  const openInCodeSandbox = async () => {
+    if (!fileContents || fileContents.length === 0) {
+      setError("No files to preview. Generate a project first.");
+      return;
+    }
+
+    setSandboxLoading(true);
+    setError(null);
+
+    try {
+      // Convert file contents to CodeSandbox format
+      const files: Record<string, { content: string; isBinary: boolean }> = {};
+      
+      for (const file of fileContents) {
+        files[file.path] = { content: file.content, isBinary: false };
+      }
+
+      // Generate CodeSandbox parameters
+      const parameters = getParameters({ files });
+      
+      // Create the sandbox URL
+      const sandboxEmbedUrl = `https://codesandbox.io/api/v1/sandboxes/define?parameters=${parameters}&embed=1&codemirror=1&hidenavigation=1&theme=dark`;
+      
+      setSandboxUrl(sandboxEmbedUrl);
+      setStatus("running");
+    } catch (err) {
+      console.error("Failed to create CodeSandbox:", err);
+      setError(err instanceof Error ? err.message : "Failed to create CodeSandbox");
+    } finally {
+      setSandboxLoading(false);
+    }
+  };
+
+  // Open CodeSandbox in new tab
+  const openSandboxInNewTab = () => {
+    if (!fileContents || fileContents.length === 0) {
+      setError("No files to preview. Generate a project first.");
+      return;
+    }
+
+    try {
+      const files: Record<string, { content: string; isBinary: boolean }> = {};
+      for (const file of fileContents) {
+        files[file.path] = { content: file.content, isBinary: false };
+      }
+
+      const parameters = getParameters({ files });
+      const url = `https://codesandbox.io/api/v1/sandboxes/define?parameters=${parameters}`;
+      window.open(url, "_blank");
+    } catch (err) {
+      console.error("Failed to open CodeSandbox:", err);
+      setError(err instanceof Error ? err.message : "Failed to open CodeSandbox");
+    }
+  };
 
   const checkStatus = async () => {
     try {
@@ -197,19 +256,25 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   };
 
+  // Close/reset sandbox
+  const closeSandbox = () => {
+    setSandboxUrl(null);
+    setStatus("unavailable");
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold">Live Preview</span>
-          {status === "running" && (
+          <span className="text-xs font-semibold">{isDeployed ? "CodeSandbox Preview" : "Live Preview"}</span>
+          {(status === "running" || sandboxUrl) && (
             <span className="flex items-center gap-1 text-xs text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
               Running
             </span>
           )}
-          {status === "starting" && (
+          {(status === "starting" || sandboxLoading) && (
             <span className="flex items-center gap-1 text-xs text-muted">
               <Loader2 size={12} className="animate-spin" />
               Starting...
@@ -217,73 +282,140 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
           )}
         </div>
         <div className="flex items-center gap-2">
-          {status === "stopped" || status === "error" ? (
-            <button
-              onClick={startPreview}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
-            >
-              <Play size={12} />
-              Start Preview
-            </button>
-          ) : status === "starting" ? (
-            <button
-              disabled
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent/50 text-white transition-colors opacity-50 cursor-not-allowed"
-            >
-              <Loader2 size={12} className="animate-spin" />
-              Starting...
-            </button>
+          {/* Deployed environment controls */}
+          {isDeployed ? (
+            sandboxUrl ? (
+              <>
+                <button
+                  onClick={openSandboxInNewTab}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
+                >
+                  <ExternalLink size={12} />
+                  Open in Tab
+                </button>
+                <button
+                  onClick={closeSandbox}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-error/10 text-error transition-colors"
+                >
+                  <Square size={12} />
+                  Close
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={openInCodeSandbox}
+                disabled={sandboxLoading || !fileContents || fileContents.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
+              >
+                {sandboxLoading ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Play size={12} />
+                    Start Preview
+                  </>
+                )}
+              </button>
+            )
           ) : (
-            <>
+            /* Local environment controls */
+            status === "stopped" || status === "error" ? (
               <button
-                onClick={openInNewTab}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
+                onClick={startPreview}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
-                <ExternalLink size={12} />
-                Open in Tab
+                <Play size={12} />
+                Start Preview
               </button>
+            ) : status === "starting" ? (
               <button
-                onClick={stopPreview}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-error/10 text-error transition-colors"
+                disabled
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent/50 text-white transition-colors opacity-50 cursor-not-allowed"
               >
-                <Square size={12} />
-                Stop
+                <Loader2 size={12} className="animate-spin" />
+                Starting...
               </button>
-            </>
+            ) : (
+              <>
+                <button
+                  onClick={openInNewTab}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
+                >
+                  <ExternalLink size={12} />
+                  Open in Tab
+                </button>
+                <button
+                  onClick={stopPreview}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-error/10 text-error transition-colors"
+                >
+                  <Square size={12} />
+                  Stop
+                </button>
+              </>
+            )
           )}
         </div>
       </div>
 
       {/* Preview Area */}
       <div className="flex-1 bg-surface relative">
-        {status === "unavailable" && (
+        {status === "unavailable" && !sandboxUrl && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mb-4">
-              <Download size={24} className="text-accent" />
+              <Code2 size={24} className="text-accent" />
             </div>
-            <h3 className="text-sm font-semibold mb-1">Preview Not Available</h3>
+            <h3 className="text-sm font-semibold mb-1">Preview Your Project</h3>
             <p className="text-xs text-muted max-w-sm mb-4">
-              Live preview requires running locally. Download your project files and run them on your computer.
+              Open your project in CodeSandbox to preview it live, or download the files to run locally.
             </p>
             <div className="flex flex-col gap-2">
               <button
+                onClick={openInCodeSandbox}
+                disabled={sandboxLoading || !fileContents || fileContents.length === 0}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
+              >
+                {sandboxLoading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Creating Sandbox...
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} />
+                    Preview in CodeSandbox
+                  </>
+                )}
+              </button>
+              <button
+                onClick={openSandboxInNewTab}
+                disabled={!fileContents || fileContents.length === 0}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors disabled:opacity-50"
+              >
+                <ExternalLink size={14} />
+                Open in New Tab
+              </button>
+              <div className="border-t border-border my-2 w-full" />
+              <button
                 onClick={downloadProject}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded hover:bg-surface-2 transition-colors"
               >
                 <Download size={14} />
                 Download Project Files
               </button>
               <button
                 onClick={() => selectLocalFolder()}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded hover:bg-surface-2 transition-colors"
               >
                 <FolderOpen size={14} />
                 Open Local Folder
               </button>
-              <p className="text-xs text-muted mt-2">
-                Then run: <code className="bg-surface px-1.5 py-0.5 rounded">npm install && npm start</code>
-              </p>
             </div>
+            {error && (
+              <p className="text-xs text-error mt-4">{error}</p>
+            )}
           </div>
         )}
 
@@ -326,12 +458,23 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
           </div>
         )}
 
-        {status === "running" && previewUrl && (
+        {status === "running" && previewUrl && !isDeployed && (
           <iframe
             src={previewUrl}
             className="w-full h-full border-0"
             title="Project Preview"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          />
+        )}
+
+        {/* CodeSandbox embed for deployed environment */}
+        {sandboxUrl && isDeployed && (
+          <iframe
+            src={sandboxUrl}
+            className="w-full h-full border-0"
+            title="CodeSandbox Preview"
+            allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+            sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
           />
         )}
       </div>

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "ai": "^6.0.116",
+    "codesandbox": "^2.2.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.577.0",
     "next": "^16.1.7",
