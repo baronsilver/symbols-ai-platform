@@ -102,7 +102,16 @@ export async function POST(request: NextRequest) {
     for (const [filePath, content] of Object.entries(files) as [string, string][]) {
       const fullPath = path.join(tempDir, filePath);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content, "utf-8");
+
+      // Rewrite index.html to use proxy URLs
+      let fileContent = content;
+      if (filePath === "index.html") {
+        // Replace ./index.js with absolute proxy URL
+        const proxyUrl = `/api/preview-proxy?project=${encodeURIComponent(projectName)}&path=/index.js`;
+        fileContent = content.replace(/src=["']\.\/index\.js["']/g, `src="${proxyUrl}"`);
+      }
+
+      await fs.writeFile(fullPath, fileContent, "utf-8");
     }
 
     // Skip npm install — smbls from esm.sh CDN already bundles all dependencies
