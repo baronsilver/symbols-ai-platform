@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
 // CDN URLs for bare module specifiers
+// esm.sh auto-bundles all sub-dependencies so @domql/utils etc. are included
 const CDN_MAP: Record<string, string> = {
-  smbls: "https://unpkg.com/smbls@3/index.js",
-  "@domql/element": "https://unpkg.com/@domql/element@3/index.js",
+  smbls: "https://esm.sh/smbls@3?bundle",
 };
 
 // Resolve a relative import path against a base file path
@@ -36,7 +36,7 @@ function rewriteImports(
   return source.replace(
     /((?:import|export)\s+(?:.*?\s+from\s+)?['"])([^'"]+)(['"])/g,
     (_match, prefix, specifier, suffix) => {
-      // Bare module specifier -> CDN
+      // Bare module specifier -> CDN (exact match first)
       if (CDN_MAP[specifier]) {
         return prefix + CDN_MAP[specifier] + suffix;
       }
@@ -46,6 +46,10 @@ function rewriteImports(
         if (blobUrlMap[resolved]) {
           return prefix + blobUrlMap[resolved] + suffix;
         }
+      }
+      // Any other bare specifier (npm package) -> esm.sh CDN
+      if (!specifier.startsWith(".") && !specifier.startsWith("/") && !specifier.startsWith("http")) {
+        return prefix + `https://esm.sh/${specifier}?bundle` + suffix;
       }
       return prefix + specifier + suffix;
     }
