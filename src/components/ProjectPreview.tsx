@@ -2,64 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-// CDN URLs for bare module specifiers
-// esm.sh auto-bundles all sub-dependencies so @domql/utils etc. are included
-const CDN_MAP: Record<string, string> = {
-  smbls: "https://esm.sh/smbls@3?bundle",
-};
-
-// Resolve a relative import path against a base file path
-function resolvePath(from: string, to: string, fileIndex: Set<string>): string {
-  if (!to.startsWith(".")) return to;
-  const fromParts = from.split("/").slice(0, -1);
-  const toParts = to.split("/");
-  for (const part of toParts) {
-    if (part === "..") fromParts.pop();
-    else if (part !== ".") fromParts.push(part);
-  }
-  let resolved = fromParts.join("/");
-  if (!fileIndex.has(resolved) && !resolved.endsWith(".js")) {
-    if (fileIndex.has(resolved + ".js")) resolved += ".js";
-    else if (fileIndex.has(resolved + "/index.js")) resolved += "/index.js";
-  }
-  return resolved;
-}
-
-// Rewrite import/export specifiers in JS source code
-function rewriteImports(
-  source: string,
-  filePath: string,
-  blobUrlMap: Record<string, string>,
-  fileIndex: Set<string>
-): string {
-  // Match: import ... from 'spec'  |  export ... from 'spec'  |  import('spec')
-  return source.replace(
-    /((?:import|export)\s+(?:.*?\s+from\s+)?['"])([^'"]+)(['"])/g,
-    (_match, prefix, specifier, suffix) => {
-      // Bare module specifier -> CDN (exact match first)
-      if (CDN_MAP[specifier]) {
-        return prefix + CDN_MAP[specifier] + suffix;
-      }
-      // Relative path -> blob URL
-      if (specifier.startsWith(".")) {
-        const resolved = resolvePath(filePath, specifier, fileIndex);
-        if (blobUrlMap[resolved]) {
-          return prefix + blobUrlMap[resolved] + suffix;
-        }
-      }
-      // Any other bare specifier (npm package) -> esm.sh CDN
-      if (!specifier.startsWith(".") && !specifier.startsWith("/") && !specifier.startsWith("http")) {
-        return prefix + `https://esm.sh/${specifier}?bundle` + suffix;
-      }
-      return prefix + specifier + suffix;
-    }
-  );
-}
-
-// Build a self-contained HTML preview that loads smbls from CDN
-// All import rewriting happens here in TypeScript, not at runtime
+// Build preview HTML served from same origin via /api/preview-html.
+// Uses importmap for CDN packages + runtime blob URL loader for local files.
+// Since this HTML is served from the real origin (not blob:), pushState works.
 function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>): string {
-  // Collect JS files
+  // Collect JS files for the virtual file system
   const jsFiles: Record<string, string> = {};
   for (const file of fileContents) {
     if (file.path.endsWith(".js") || file.path.endsWith(".mjs")) {
@@ -67,90 +14,102 @@ function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>
     }
   }
 
-  const fileIndex = new Set(Object.keys(jsFiles));
-
-  // Topological sort: process leaf modules first so their blob URLs
-  // are available when parent modules are rewritten.
-  // Simple approach: process files with deepest paths first.
-  const sortedPaths = Object.keys(jsFiles).sort((a, b) => {
-    const depthA = a.split("/").length;
-    const depthB = b.split("/").length;
-    return depthB - depthA; // deepest first
-  });
-
-  // Create blob URLs bottom-up
-  const blobUrlMap: Record<string, string> = {};
-
-  // We need to do multiple passes since a file at depth N may import
-  // a sibling at the same depth. Do passes until no new URLs are created.
-  let changed = true;
-  const maxPasses = 10;
-  let pass = 0;
-  while (changed && pass < maxPasses) {
-    changed = false;
-    pass++;
-    for (const filePath of sortedPaths) {
-      if (blobUrlMap[filePath]) continue;
-
-      // Check if all local imports of this file are already resolved
-      const source = jsFiles[filePath];
-      const importRegex = /(?:import|export)\s+(?:.*?\s+from\s+)?['"]([^'"]+)['"]/g;
-      let allResolved = true;
-      let m;
-      while ((m = importRegex.exec(source)) !== null) {
-        const spec = m[1];
-        if (spec.startsWith(".")) {
-          const resolved = resolvePath(filePath, spec, fileIndex);
-          if (fileIndex.has(resolved) && !blobUrlMap[resolved]) {
-            allResolved = false;
-            break;
-          }
-        }
-      }
-
-      if (!allResolved) continue;
-
-      // Rewrite this file's imports and create a blob URL
-      const rewritten = rewriteImports(source, filePath, blobUrlMap, fileIndex);
-      const blob = new Blob([rewritten], { type: "application/javascript" });
-      blobUrlMap[filePath] = URL.createObjectURL(blob);
-      changed = true;
+  // Collect bare specifiers used in project files for the importmap
+  const bareSpecifiers = new Set<string>();
+  for (const source of Object.values(jsFiles)) {
+    const regex = /(?:import|export)\s+.*?from\s+['"]([^'"./][^'"]*)['"]/g;
+    let m;
+    while ((m = regex.exec(source)) !== null) {
+      bareSpecifiers.add(m[1]);
     }
   }
 
-  // Handle any remaining files that couldn't be resolved (circular deps etc)
-  for (const filePath of sortedPaths) {
-    if (blobUrlMap[filePath]) continue;
-    const rewritten = rewriteImports(jsFiles[filePath], filePath, blobUrlMap, fileIndex);
-    const blob = new Blob([rewritten], { type: "application/javascript" });
-    blobUrlMap[filePath] = URL.createObjectURL(blob);
+  // Build importmap entries: all bare specifiers -> esm.sh with ?bundle
+  const importmapEntries: Record<string, string> = {};
+  for (const spec of bareSpecifiers) {
+    importmapEntries[spec] = `https://esm.sh/${spec}?bundle`;
   }
+  const importmapJson = JSON.stringify({ imports: importmapEntries }, null, 2);
 
-  // Find the entry point
-  const entryPath = jsFiles["index.js"] ? "index.js" : sortedPaths.find(f => f.endsWith("index.js")) || sortedPaths[0];
-  const entryBlobUrl = blobUrlMap[entryPath] || "";
+  // Embed all JS files as a JSON blob for the runtime loader
+  const filesJson = JSON.stringify(jsFiles);
 
+  // The runtime loader inside the iframe:
+  // 1. Reads JS files from embedded JSON
+  // 2. Resolves relative imports to blob URLs (created in iframe context)
+  // 3. Bare specifiers are handled by the importmap
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Symbols Preview</title>
+  <script type="importmap">${importmapJson}</script>
   <style>
     body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
     .preview-error { padding: 20px; color: #f87171; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+    .preview-loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #71717a; font-size: 14px; }
   </style>
 </head>
 <body>
+  <div id="preview-loading" class="preview-loading">Loading preview...</div>
+  <script id="preview-files" type="application/json">${filesJson}</script>
   <script type="module">
+    const FILES = JSON.parse(document.getElementById('preview-files').textContent);
+    const fileKeys = new Set(Object.keys(FILES));
+    const blobCache = {};
+
+    function resolvePath(from, to) {
+      if (!to.startsWith('.')) return to;
+      const parts = from.split('/').slice(0, -1);
+      for (const seg of to.split('/')) {
+        if (seg === '..') parts.pop();
+        else if (seg !== '.') parts.push(seg);
+      }
+      let r = parts.join('/');
+      if (!fileKeys.has(r) && !r.endsWith('.js')) {
+        if (fileKeys.has(r + '.js')) r += '.js';
+        else if (fileKeys.has(r + '/index.js')) r += '/index.js';
+      }
+      return r;
+    }
+
+    async function toBlobUrl(filePath) {
+      if (blobCache[filePath]) return blobCache[filePath];
+      let src = FILES[filePath];
+      if (!src) {
+        const b = new Blob(['export default {}'], {type:'application/javascript'});
+        return blobCache[filePath] = URL.createObjectURL(b);
+      }
+      // Find relative imports and resolve them to blob URLs first
+      const relImports = [];
+      src.replace(/(?:import|export)\\s+(?:[\\s\\S]*?from\\s+)?['"](\\.[^'"]+)['"]/g, (_, s) => {
+        relImports.push(s);
+      });
+      for (const spec of relImports) {
+        const resolved = resolvePath(filePath, spec);
+        const url = await toBlobUrl(resolved);
+        // Replace the specifier with the blob URL
+        src = src.split("'" + spec + "'").join("'" + url + "'");
+        src = src.split('"' + spec + '"').join('"' + url + '"');
+      }
+      const b = new Blob([src], {type:'application/javascript'});
+      return blobCache[filePath] = URL.createObjectURL(b);
+    }
+
     try {
-      await import("${entryBlobUrl}");
+      const entry = FILES['index.js'] ? 'index.js' : Object.keys(FILES).find(f => f.endsWith('index.js')) || Object.keys(FILES)[0];
+      if (!entry) throw new Error('No entry file found');
+      const url = await toBlobUrl(entry);
+      document.getElementById('preview-loading')?.remove();
+      await import(url);
     } catch(e) {
       console.error('Preview error:', e);
-      const div = document.createElement('div');
-      div.className = 'preview-error';
-      div.textContent = 'Preview Error:\\n' + e.message + '\\n\\n' + (e.stack || '');
-      document.body.appendChild(div);
+      document.getElementById('preview-loading')?.remove();
+      const d = document.createElement('div');
+      d.className = 'preview-error';
+      d.textContent = 'Preview Error:\\n' + e.message + '\\n\\n' + (e.stack || '');
+      document.body.appendChild(d);
     }
   </script>
 </body>
@@ -168,7 +127,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeployed, setIsDeployed] = useState(false);
-  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
+  const [previewIframeUrl, setPreviewIframeUrl] = useState<string | null>(null);
   const [sandboxLoading, setSandboxLoading] = useState(false);
 
   useEffect(() => {
@@ -184,8 +143,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   }, [projectName]);
 
-  // Build and show inline blob preview
-  const startBlobPreview = () => {
+  // Push preview HTML to API route, then load via same-origin iframe
+  const startSameOriginPreview = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
@@ -195,24 +154,27 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     setError(null);
 
     try {
-      // Revoke previous blob URL
-      if (blobPreviewUrl) URL.revokeObjectURL(blobPreviewUrl);
-
       const html = buildPreviewHtml(fileContents);
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      setBlobPreviewUrl(url);
+      const res = await fetch("/api/preview-html", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectName, html }),
+      });
+      if (!res.ok) throw new Error("Failed to store preview HTML");
+
+      // Load the preview from same-origin API route (cache-bust with timestamp)
+      setPreviewIframeUrl(`/api/preview-html?project=${encodeURIComponent(projectName)}&t=${Date.now()}`);
       setStatus("running");
     } catch (err) {
-      console.error("Failed to build preview:", err);
+      console.error("Failed to start preview:", err);
       setError(err instanceof Error ? err.message : "Failed to start preview");
     } finally {
       setSandboxLoading(false);
     }
   };
 
-  // Open preview in new tab
-  const openPreviewInNewTab = () => {
+  // Open preview in new tab via same-origin URL
+  const openPreviewInNewTab = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
@@ -220,9 +182,12 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
 
     try {
       const html = buildPreviewHtml(fileContents);
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      await fetch("/api/preview-html", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectName, html }),
+      });
+      window.open(`/api/preview-html?project=${encodeURIComponent(projectName)}&t=${Date.now()}`, "_blank");
     } catch (err) {
       console.error("Failed to open preview:", err);
       setError(err instanceof Error ? err.message : "Failed to open preview");
@@ -400,8 +365,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
 
   // Close/reset embedded preview
   const closeSandbox = () => {
-    if (blobPreviewUrl) URL.revokeObjectURL(blobPreviewUrl);
-    setBlobPreviewUrl(null);
+    setPreviewIframeUrl(null);
     setStatus("unavailable");
   };
 
@@ -411,7 +375,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold">{isDeployed ? "Browser Preview" : "Live Preview"}</span>
-          {(status === "running" || blobPreviewUrl) && (
+          {(status === "running" || previewIframeUrl) && (
             <span className="flex items-center gap-1 text-xs text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
               Running
@@ -427,7 +391,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
         <div className="flex items-center gap-2">
           {/* Deployed environment controls */}
           {isDeployed ? (
-            blobPreviewUrl ? (
+            previewIframeUrl ? (
               <>
                 <button
                   onClick={openPreviewInNewTab}
@@ -446,7 +410,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
               </>
             ) : (
               <button
-                onClick={startBlobPreview}
+                onClick={startSameOriginPreview}
                 disabled={sandboxLoading || !fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
@@ -505,7 +469,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
 
       {/* Preview Area */}
       <div className="flex-1 bg-surface relative">
-        {status === "unavailable" && !blobPreviewUrl && (
+        {status === "unavailable" && !previewIframeUrl && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mb-4">
               <Code2 size={24} className="text-accent" />
@@ -516,7 +480,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
             </p>
             <div className="flex flex-col gap-2">
               <button
-                onClick={startBlobPreview}
+                onClick={startSameOriginPreview}
                 disabled={sandboxLoading || !fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
@@ -610,13 +574,12 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
           />
         )}
 
-        {/* Blob URL preview iframe for deployed environment */}
-        {blobPreviewUrl && isDeployed && (
+        {/* Same-origin preview iframe for deployed environment */}
+        {previewIframeUrl && isDeployed && (
           <iframe
-            src={blobPreviewUrl}
+            src={previewIframeUrl}
             className="w-full h-full border-0"
             title="Browser Preview"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
         )}
       </div>
