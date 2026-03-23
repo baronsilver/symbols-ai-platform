@@ -2,23 +2,129 @@
 
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-// Build a self-contained HTML preview that loads smbls from CDN
-// and inlines all project JS files as a virtual module system
-function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>): string {
-  // Collect JS files for inlining as virtual modules
-  const jsFiles: Record<string, string> = {};
-  let customIndexHtml: string | null = null;
+// CDN URLs for bare module specifiers
+const CDN_MAP: Record<string, string> = {
+  smbls: "https://unpkg.com/smbls@3/index.js",
+  "@domql/element": "https://unpkg.com/@domql/element@3/index.js",
+};
 
+// Resolve a relative import path against a base file path
+function resolvePath(from: string, to: string, fileIndex: Set<string>): string {
+  if (!to.startsWith(".")) return to;
+  const fromParts = from.split("/").slice(0, -1);
+  const toParts = to.split("/");
+  for (const part of toParts) {
+    if (part === "..") fromParts.pop();
+    else if (part !== ".") fromParts.push(part);
+  }
+  let resolved = fromParts.join("/");
+  if (!fileIndex.has(resolved) && !resolved.endsWith(".js")) {
+    if (fileIndex.has(resolved + ".js")) resolved += ".js";
+    else if (fileIndex.has(resolved + "/index.js")) resolved += "/index.js";
+  }
+  return resolved;
+}
+
+// Rewrite import/export specifiers in JS source code
+function rewriteImports(
+  source: string,
+  filePath: string,
+  blobUrlMap: Record<string, string>,
+  fileIndex: Set<string>
+): string {
+  // Match: import ... from 'spec'  |  export ... from 'spec'  |  import('spec')
+  return source.replace(
+    /((?:import|export)\s+(?:.*?\s+from\s+)?['"])([^'"]+)(['"])/g,
+    (_match, prefix, specifier, suffix) => {
+      // Bare module specifier -> CDN
+      if (CDN_MAP[specifier]) {
+        return prefix + CDN_MAP[specifier] + suffix;
+      }
+      // Relative path -> blob URL
+      if (specifier.startsWith(".")) {
+        const resolved = resolvePath(filePath, specifier, fileIndex);
+        if (blobUrlMap[resolved]) {
+          return prefix + blobUrlMap[resolved] + suffix;
+        }
+      }
+      return prefix + specifier + suffix;
+    }
+  );
+}
+
+// Build a self-contained HTML preview that loads smbls from CDN
+// All import rewriting happens here in TypeScript, not at runtime
+function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>): string {
+  // Collect JS files
+  const jsFiles: Record<string, string> = {};
   for (const file of fileContents) {
-    if (file.path === "index.html") {
-      customIndexHtml = file.content;
-    } else if (file.path.endsWith(".js") || file.path.endsWith(".mjs")) {
+    if (file.path.endsWith(".js") || file.path.endsWith(".mjs")) {
       jsFiles[file.path] = file.content;
     }
   }
 
-  // Build a JSON map of all JS file contents for the virtual module loader
-  const fileMapJson = JSON.stringify(jsFiles);
+  const fileIndex = new Set(Object.keys(jsFiles));
+
+  // Topological sort: process leaf modules first so their blob URLs
+  // are available when parent modules are rewritten.
+  // Simple approach: process files with deepest paths first.
+  const sortedPaths = Object.keys(jsFiles).sort((a, b) => {
+    const depthA = a.split("/").length;
+    const depthB = b.split("/").length;
+    return depthB - depthA; // deepest first
+  });
+
+  // Create blob URLs bottom-up
+  const blobUrlMap: Record<string, string> = {};
+
+  // We need to do multiple passes since a file at depth N may import
+  // a sibling at the same depth. Do passes until no new URLs are created.
+  let changed = true;
+  const maxPasses = 10;
+  let pass = 0;
+  while (changed && pass < maxPasses) {
+    changed = false;
+    pass++;
+    for (const filePath of sortedPaths) {
+      if (blobUrlMap[filePath]) continue;
+
+      // Check if all local imports of this file are already resolved
+      const source = jsFiles[filePath];
+      const importRegex = /(?:import|export)\s+(?:.*?\s+from\s+)?['"]([^'"]+)['"]/g;
+      let allResolved = true;
+      let m;
+      while ((m = importRegex.exec(source)) !== null) {
+        const spec = m[1];
+        if (spec.startsWith(".")) {
+          const resolved = resolvePath(filePath, spec, fileIndex);
+          if (fileIndex.has(resolved) && !blobUrlMap[resolved]) {
+            allResolved = false;
+            break;
+          }
+        }
+      }
+
+      if (!allResolved) continue;
+
+      // Rewrite this file's imports and create a blob URL
+      const rewritten = rewriteImports(source, filePath, blobUrlMap, fileIndex);
+      const blob = new Blob([rewritten], { type: "application/javascript" });
+      blobUrlMap[filePath] = URL.createObjectURL(blob);
+      changed = true;
+    }
+  }
+
+  // Handle any remaining files that couldn't be resolved (circular deps etc)
+  for (const filePath of sortedPaths) {
+    if (blobUrlMap[filePath]) continue;
+    const rewritten = rewriteImports(jsFiles[filePath], filePath, blobUrlMap, fileIndex);
+    const blob = new Blob([rewritten], { type: "application/javascript" });
+    blobUrlMap[filePath] = URL.createObjectURL(blob);
+  }
+
+  // Find the entry point
+  const entryPath = jsFiles["index.js"] ? "index.js" : sortedPaths.find(f => f.endsWith("index.js")) || sortedPaths[0];
+  const entryBlobUrl = blobUrlMap[entryPath] || "";
 
   return `<!DOCTYPE html>
 <html>
@@ -29,107 +135,19 @@ function buildPreviewHtml(fileContents: Array<{ path: string; content: string }>
   <style>
     body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
     .preview-error { padding: 20px; color: #f87171; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
-    .preview-loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #71717a; font-size: 14px; }
   </style>
 </head>
 <body>
-  <div id="loading" class="preview-loading">Loading preview...</div>
-  <script>
-    // Virtual file system and module loader
-    (function() {
-      const FILES = ${fileMapJson};
-
-      // Resolve relative paths
-      function resolvePath(from, to) {
-        if (!to.startsWith('.')) return to;
-        const fromParts = from.split('/').slice(0, -1);
-        const toParts = to.split('/');
-        for (const part of toParts) {
-          if (part === '..') fromParts.pop();
-          else if (part !== '.') fromParts.push(part);
-        }
-        let resolved = fromParts.join('/');
-        // Try with .js extension if not found
-        if (!FILES[resolved] && !resolved.endsWith('.js')) {
-          if (FILES[resolved + '.js']) resolved += '.js';
-          else if (FILES[resolved + '/index.js']) resolved += '/index.js';
-        }
-        return resolved;
-      }
-
-      // Rewrite imports in source code to use blob URLs
-      const blobUrlCache = {};
-
-      async function createBlobUrl(filePath) {
-        if (blobUrlCache[filePath]) return blobUrlCache[filePath];
-
-        let source = FILES[filePath];
-        if (!source) {
-          console.warn('File not found:', filePath);
-          // Return empty module
-          const blob = new Blob(['export default {}'], { type: 'application/javascript' });
-          const url = URL.createObjectURL(blob);
-          blobUrlCache[filePath] = url;
-          return url;
-        }
-
-        // Find all import statements and rewrite them
-        const importRegex = /(?:import\s+.*?from\s+['"])([^'"]+)(['"])|(?:import\s*\(['"])([^'"]+)(['"]\s*\))|(?:export\s+.*?from\s+['"])([^'"]+)(['"])/g;
-        const imports = [];
-        let match;
-
-        while ((match = importRegex.exec(source)) !== null) {
-          const specifier = match[1] || match[3] || match[5];
-          imports.push(specifier);
-        }
-
-        // Pre-create blob URLs for all local imports
-        const urlMap = {};
-        for (const spec of imports) {
-          if (spec.startsWith('.')) {
-            const resolved = resolvePath(filePath, spec);
-            urlMap[spec] = await createBlobUrl(resolved);
-          } else if (spec === 'smbls') {
-            urlMap[spec] = 'https://unpkg.com/smbls@3/index.js';
-          }
-          // Other bare specifiers left as-is (will fail but that's expected)
-        }
-
-        // Replace import specifiers with blob URLs using simple string replace
-        let rewritten = source;
-        for (const [spec, url] of Object.entries(urlMap)) {
-          // Replace both single and double quoted variants
-          rewritten = rewritten.split("'" + spec + "'").join("'" + url + "'");
-          rewritten = rewritten.split('"' + spec + '"').join('"' + url + '"');
-        }
-
-        const blob = new Blob([rewritten], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        blobUrlCache[filePath] = url;
-        return url;
-      }
-
-      // Start the app
-      async function boot() {
-        try {
-          const entryFile = FILES['index.js'] ? 'index.js' : Object.keys(FILES).find(f => f.endsWith('index.js')) || Object.keys(FILES)[0];
-          if (!entryFile) throw new Error('No entry file found');
-
-          const entryUrl = await createBlobUrl(entryFile);
-          document.getElementById('loading').remove();
-          await import(entryUrl);
-        } catch(e) {
-          console.error('Preview error:', e);
-          document.getElementById('loading')?.remove();
-          const div = document.createElement('div');
-          div.className = 'preview-error';
-          div.textContent = 'Preview Error:\\n' + e.message + '\\n\\n' + (e.stack || '');
-          document.body.appendChild(div);
-        }
-      }
-
-      boot();
-    })();
+  <script type="module">
+    try {
+      await import("${entryBlobUrl}");
+    } catch(e) {
+      console.error('Preview error:', e);
+      const div = document.createElement('div');
+      div.className = 'preview-error';
+      div.textContent = 'Preview Error:\\n' + e.message + '\\n\\n' + (e.stack || '');
+      document.body.appendChild(div);
+    }
   </script>
 </body>
 </html>`;
