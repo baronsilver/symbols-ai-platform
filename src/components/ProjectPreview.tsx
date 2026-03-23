@@ -1,15 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-// Extract all project files for the preview server
-function extractAllFiles(fileContents: Array<{ path: string; content: string }>): Record<string, string> {
-  const allFiles: Record<string, string> = {};
-  for (const file of fileContents) {
-    allFiles[file.path] = file.content;
-  }
-  return allFiles;
-}
+import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2, Copy, Check } from "lucide-react";
 
 interface ProjectPreviewProps {
   projectName: string;
@@ -17,183 +9,43 @@ interface ProjectPreviewProps {
   onLocalFolderSelect?: (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => void;
 }
 
+const PREVIEW_PORT = 1234;
+
 export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect }: ProjectPreviewProps) {
-  const [status, setStatus] = useState<"stopped" | "starting" | "running" | "error" | "unavailable">("stopped");
+  const [status, setStatus] = useState<"stopped" | "running" | "error" | "unavailable">("stopped");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeployed, setIsDeployed] = useState(false);
-  const [previewIframeUrl, setPreviewIframeUrl] = useState<string | null>(null);
-  const [sandboxLoading, setSandboxLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [localFolderName, setLocalFolderName] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if we're in a deployed environment (no localhost)
-    const isLocalhost = typeof window !== "undefined" && 
+    const isLocalhost = typeof window !== "undefined" &&
       (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
     setIsDeployed(!isLocalhost);
-    
-    if (isLocalhost) {
-      checkStatus();
-    } else {
+    if (!isLocalhost) {
       setStatus("unavailable");
     }
-  }, [projectName]);
-
-  // Send JS files to API route, then load preview via same-origin iframe
-  const startSameOriginPreview = async () => {
-    if (!fileContents || fileContents.length === 0) {
-      setError("No files to preview. Generate a project first.");
-      return;
-    }
-
-    setSandboxLoading(true);
-    setError(null);
-
-    try {
-      const files = extractAllFiles(fileContents);
-      const res = await fetch("/api/preview-server", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, files }),
-      });
-      if (!res.ok) throw new Error("Failed to start preview server");
-
-      const data = await res.json();
-      setPreviewIframeUrl(`/api/preview-proxy?project=${encodeURIComponent(projectName)}&path=/`);
-      setStatus("running");
-    } catch (err) {
-      console.error("Failed to start preview:", err);
-      setError(err instanceof Error ? err.message : "Failed to start preview");
-    } finally {
-      setSandboxLoading(false);
-    }
-  };
-
-  // Open preview in new tab via same-origin URL
-  const openPreviewInNewTab = async () => {
-    if (!fileContents || fileContents.length === 0) {
-      setError("No files to preview. Generate a project first.");
-      return;
-    }
-
-    try {
-      const files = extractAllFiles(fileContents);
-      await fetch("/api/preview-server", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, files }),
-      });
-      window.open(`/api/preview-proxy?project=${encodeURIComponent(projectName)}&path=/`, "_blank");
-    } catch (err) {
-      console.error("Failed to open preview:", err);
-      setError(err instanceof Error ? err.message : "Failed to open preview");
-    }
-  };
-
-  const checkStatus = async () => {
-    try {
-      const res = await fetch(`/api/preview?project=${encodeURIComponent(projectName)}`);
-      const data = await res.json();
-      if (data.status === "running") {
-        setStatus("running");
-        setPreviewUrl(data.url);
-      } else {
-        setStatus("stopped");
-        setPreviewUrl(null);
-      }
-    } catch (err) {
-      console.error("Failed to check preview status:", err);
-      setStatus("unavailable");
-    }
-  };
+  }, []);
 
   const startPreview = async () => {
-    setStatus("starting");
-    setError(null);
-    
-    try {
-      const res = await fetch("/api/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, action: "start" }),
-      });
-
-      const data = await res.json();
-
-      if (data.error) {
-        // Check if it's a "project not found" error (deployed environment)
-        if (data.error === "Project not found") {
-          setStatus("unavailable");
-          return;
-        }
-        setError(data.error + (data.details ? `: ${data.details}` : ""));
-        setStatus("error");
-        return;
-      }
-
-      setStatus("running");
-      setPreviewUrl(data.url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start preview");
-      setStatus("error");
-    }
+    setPreviewUrl(`http://localhost:${PREVIEW_PORT}`);
+    setStatus("running");
   };
 
-  const selectLocalFolder = async () => {
-    try {
-      // Use File System Access API to let user select a folder
-      const dirHandle = await (window as any).showDirectoryPicker();
-      
-      // Recursively read all files from the folder
-      const files: string[] = [];
-      const fileContentsArray: Array<{ path: string; content: string }> = [];
-      
-      async function readDirectory(handle: any, path: string = "") {
-        for await (const entry of handle.values()) {
-          const entryPath = path ? `${path}/${entry.name}` : entry.name;
-          
-          if (entry.kind === "file") {
-            // Skip node_modules and hidden files
-            if (entryPath.includes("node_modules") || entry.name.startsWith(".")) {
-              continue;
-            }
-            
-            try {
-              const file = await entry.getFile();
-              const content = await file.text();
-              files.push(entryPath);
-              fileContentsArray.push({ path: entryPath, content });
-            } catch (e) {
-              console.warn(`Could not read file: ${entryPath}`, e);
-            }
-          } else if (entry.kind === "directory") {
-            // Skip node_modules and hidden directories
-            if (entry.name === "node_modules" || entry.name.startsWith(".")) {
-              continue;
-            }
-            await readDirectory(entry, entryPath);
-          }
-        }
-      }
-      
-      await readDirectory(dirHandle);
-      
-      if (files.length === 0) {
-        alert("No files found in the selected folder.");
-        return;
-      }
-      
-      // Call the callback to update the visualizer
-      if (onLocalFolderSelect) {
-        onLocalFolderSelect(dirHandle.name, files, fileContentsArray);
-      }
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        // User cancelled
-        return;
-      }
-      console.error("Failed to select folder:", err);
-      alert("Failed to select folder. Make sure you're using a modern browser that supports the File System Access API.");
-    }
+  const stopPreview = () => {
+    setPreviewUrl(null);
+    setStatus("stopped");
+  };
+
+  const copyCommands = () => {
+    const folderName = localFolderName || projectName;
+    const commands = `cd ${folderName}
+npm install
+npm start`;
+    navigator.clipboard.writeText(commands);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const downloadProject = async () => {
@@ -203,16 +55,13 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
 
     try {
-      // Dynamically import JSZip
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
 
-      // Add files to zip with proper folder structure
       for (const file of fileContents) {
         zip.file(file.path, file.content);
       }
 
-      // Generate zip blob
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -222,8 +71,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Failed to create ZIP:", err);
-      // Fallback to text file if JSZip fails
-      const content = fileContents.map(f => 
+      const content = fileContents.map(f =>
         `// FILE: ${f.path}\n${f.content}\n`
       ).join("\n" + "=".repeat(80) + "\n\n");
 
@@ -237,187 +85,107 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   };
 
-  const stopPreview = async () => {
-    try {
-      await fetch("/api/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectName, action: "stop" }),
-      });
-
-      setStatus("stopped");
-      setPreviewUrl(null);
-    } catch (err) {
-      console.error("Failed to stop preview:", err);
-    }
-  };
-
   const openInNewTab = () => {
     if (previewUrl) {
       window.open(previewUrl, "_blank");
     }
   };
 
-  // Close/reset embedded preview
-  const closeSandbox = async () => {
+  const selectLocalFolder = async () => {
     try {
-      await fetch(`/api/preview-server?project=${encodeURIComponent(projectName)}`, { method: "DELETE" });
-    } catch (err) {
-      console.error("Failed to stop preview server:", err);
-    }
-    setPreviewIframeUrl(null);
-    setStatus("unavailable");
-  };
+      const dirHandle = await (window as any).showDirectoryPicker();
+      const files: string[] = [];
+      const fileContentsArray: Array<{ path: string; content: string }> = [];
 
-  // Cleanup preview server on unmount
-  useEffect(() => {
-    return () => {
-      fetch(`/api/preview-server?project=${encodeURIComponent(projectName)}`, { method: "DELETE" }).catch(() => {});
-    };
-  }, [projectName]);
+      async function readDirectory(handle: any, path: string = "") {
+        for await (const entry of handle.values()) {
+          const entryPath = path ? `${path}/${entry.name}` : entry.name;
+
+          if (entry.kind === "file") {
+            if (entryPath.includes("node_modules") || entry.name.startsWith(".")) {
+              continue;
+            }
+            const file = await entry.getFile();
+            const content = await file.text();
+            files.push(entryPath);
+            fileContentsArray.push({ path: entryPath, content });
+          } else if (entry.kind === "directory" && entry.name !== "node_modules") {
+            await readDirectory(entry, entryPath);
+          }
+        }
+      }
+
+      await readDirectory(dirHandle);
+      setLocalFolderName(dirHandle.name);
+      onLocalFolderSelect?.(dirHandle.name, files, fileContentsArray);
+    } catch (err) {
+      console.error("Failed to select folder:", err);
+      setError(err instanceof Error ? err.message : "Failed to select folder");
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
       {/* Controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold">{isDeployed ? "Browser Preview" : "Live Preview"}</span>
-          {(status === "running" || previewIframeUrl) && (
+          <span className="text-xs font-semibold">Local Preview</span>
+          {status === "running" && (
             <span className="flex items-center gap-1 text-xs text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              Running
-            </span>
-          )}
-          {(status === "starting" || sandboxLoading) && (
-            <span className="flex items-center gap-1 text-xs text-muted">
-              <Loader2 size={12} className="animate-spin" />
-              Starting...
+              Running on port {PREVIEW_PORT}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Deployed environment controls */}
-          {isDeployed ? (
-            previewIframeUrl ? (
-              <>
-                <button
-                  onClick={openPreviewInNewTab}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
-                >
-                  <ExternalLink size={12} />
-                  Open in Tab
-                </button>
-                <button
-                  onClick={closeSandbox}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-error/10 text-error transition-colors"
-                >
-                  <Square size={12} />
-                  Close
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={startSameOriginPreview}
-                disabled={sandboxLoading || !fileContents || fileContents.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
-              >
-                {sandboxLoading ? (
-                  <>
-                    <Loader2 size={12} className="animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Play size={12} />
-                    Start Preview
-                  </>
-                )}
-              </button>
-            )
+          {status === "stopped" || status === "error" ? (
+            <button
+              onClick={startPreview}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors"
+            >
+              <Play size={12} />
+              Start Preview
+            </button>
           ) : (
-            /* Local environment controls */
-            status === "stopped" || status === "error" ? (
+            <>
               <button
-                onClick={startPreview}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
+                onClick={openInNewTab}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
               >
-                <Play size={12} />
-                Start Preview
+                <ExternalLink size={12} />
+                Open in Tab
               </button>
-            ) : status === "starting" ? (
               <button
-                disabled
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent/50 text-white transition-colors opacity-50 cursor-not-allowed"
+                onClick={stopPreview}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-error/10 text-error transition-colors"
               >
-                <Loader2 size={12} className="animate-spin" />
-                Starting...
+                <Square size={12} />
+                Stop
               </button>
-            ) : (
-              <>
-                <button
-                  onClick={openInNewTab}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
-                >
-                  <ExternalLink size={12} />
-                  Open in Tab
-                </button>
-                <button
-                  onClick={stopPreview}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-error/10 text-error transition-colors"
-                >
-                  <Square size={12} />
-                  Stop
-                </button>
-              </>
-            )
+            </>
           )}
         </div>
       </div>
 
       {/* Preview Area */}
       <div className="flex-1 bg-surface relative">
-        {status === "unavailable" && !previewIframeUrl && (
+        {status === "unavailable" && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mb-4">
               <Code2 size={24} className="text-accent" />
             </div>
             <h3 className="text-sm font-semibold mb-1">Preview Your Project</h3>
             <p className="text-xs text-muted max-w-sm mb-4">
-              Preview your project directly in the browser, or download the files to run locally.
+              Download the project and run it locally, then preview it here.
             </p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={startSameOriginPreview}
-                disabled={sandboxLoading || !fileContents || fileContents.length === 0}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
-              >
-                {sandboxLoading ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Starting Preview...
-                  </>
-                ) : (
-                  <>
-                    <Play size={14} />
-                    Start Preview
-                  </>
-                )}
-              </button>
-              <button
-                onClick={openPreviewInNewTab}
-                disabled={!fileContents || fileContents.length === 0}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors disabled:opacity-50"
-              >
-                <ExternalLink size={14} />
-                Open in New Tab
-              </button>
-              <div className="border-t border-border my-2 w-full" />
+            <div className="flex flex-col gap-2 w-full max-w-xs">
               <button
                 onClick={downloadProject}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded hover:bg-surface-2 transition-colors"
+                disabled={!fileContents || fileContents.length === 0}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
                 <Download size={14} />
-                Download Project Files
+                Download Project (ZIP)
               </button>
               <button
                 onClick={() => selectLocalFolder()}
@@ -440,17 +208,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
             </div>
             <h3 className="text-sm font-semibold mb-1">Preview Not Running</h3>
             <p className="text-xs text-muted max-w-sm mb-4">
-              Click "Start Preview" to run the Symbols dev server and see your project live
-            </p>
-          </div>
-        )}
-
-        {status === "starting" && (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <Loader2 size={32} className="text-accent animate-spin mb-4" />
-            <h3 className="text-sm font-semibold mb-1">Starting Dev Server...</h3>
-            <p className="text-xs text-muted max-w-sm">
-              Installing dependencies and starting the Symbols platform
+              Start the dev server locally, then click "Start Preview" to see your project.
             </p>
           </div>
         )}
@@ -472,7 +230,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
           </div>
         )}
 
-        {status === "running" && previewUrl && !isDeployed && (
+        {status === "running" && previewUrl && (
           <iframe
             src={previewUrl}
             className="w-full h-full border-0"
@@ -480,16 +238,55 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
         )}
-
-        {/* Same-origin preview iframe for deployed environment */}
-        {previewIframeUrl && isDeployed && (
-          <iframe
-            src={previewIframeUrl}
-            className="w-full h-full border-0"
-            title="Browser Preview"
-          />
-        )}
       </div>
+
+      {/* Instructions Panel */}
+      {status === "running" && (
+        <div className="border-t border-border bg-background/50 p-4">
+          <h4 className="text-xs font-semibold mb-2">Quick Start</h4>
+          <div className="bg-surface-2 rounded p-3 mb-2">
+            {localFolderName ? (
+              <>
+                <p className="text-xs text-muted mb-2">Run these commands in your local folder:</p>
+                <div className="flex gap-2 items-start">
+                  <code className="text-xs bg-surface-3 px-2 py-1 rounded flex-1 font-mono">
+                    cd {localFolderName}<br />
+                    npm install<br />
+                    npm start
+                  </code>
+                  <button
+                    onClick={copyCommands}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted mb-2">1. Download the project as ZIP</p>
+                <p className="text-xs text-muted mb-2">2. Extract and run these commands:</p>
+                <div className="flex gap-2 items-start">
+                  <code className="text-xs bg-surface-3 px-2 py-1 rounded flex-1 font-mono">
+                    cd {projectName}<br />
+                    npm install<br />
+                    npm start
+                  </code>
+                  <button
+                    onClick={copyCommands}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-muted">
+            The dev server runs on <code className="bg-surface-2 px-1 rounded">http://localhost:{PREVIEW_PORT}</code>
+          </p>
+        </div>
+      )}
     </div>
   );
 }
