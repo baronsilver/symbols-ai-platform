@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, FileCode, Eye } from "lucide-react";
+import { FolderOpen, FileCode, Eye, Code2 } from "lucide-react";
 
 interface GeneratedFilesPanelProps {
   projectName: string;
@@ -22,20 +22,12 @@ export function GeneratedFilesPanel({
             Project Generated
           </span>
         </div>
-        {onViewProject && (
-          <button
-            onClick={onViewProject}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs rounded bg-success/20 hover:bg-success/30 text-success transition-colors"
-          >
-            <Eye size={12} />
-            View Project
-          </button>
-        )}
+        <span className="text-xs text-muted">{files.length} files</span>
       </div>
-      <div className="text-xs text-muted mb-2">
+      <div className="text-xs text-muted mb-3">
         Saved to <span className="font-mono text-foreground/80">output/{projectName}/</span>
       </div>
-      <div className="space-y-1 max-h-40 overflow-y-auto">
+      <div className="space-y-1 max-h-32 overflow-y-auto mb-3">
         {files.map((file) => (
           <div
             key={file}
@@ -46,6 +38,15 @@ export function GeneratedFilesPanel({
           </div>
         ))}
       </div>
+      {onViewProject && (
+        <button
+          onClick={onViewProject}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-accent hover:bg-accent/90 text-white transition-colors"
+        >
+          <Code2 size={16} />
+          Open Project
+        </button>
+      )}
     </div>
   );
 }

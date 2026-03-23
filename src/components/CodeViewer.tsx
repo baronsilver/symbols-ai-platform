@@ -1,7 +1,22 @@
 "use client";
 
 import { Copy, Check, Edit2, Save, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import hljs from "highlight.js/lib/core";
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import json from "highlight.js/lib/languages/json";
+import css from "highlight.js/lib/languages/css";
+import xml from "highlight.js/lib/languages/xml";
+import markdown from "highlight.js/lib/languages/markdown";
+
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("html", xml);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("markdown", markdown);
 
 interface CodeViewerProps {
   filePath: string;
@@ -54,9 +69,23 @@ export function CodeViewer({ filePath, content, language, onSave, isEditable = f
       html: "html",
       css: "css",
       md: "markdown",
+      toml: "text",
+      sql: "text",
     };
     return langMap[ext || ""] || "text";
   };
+
+  const highlightedHtml = useMemo(() => {
+    const lang = getLanguage();
+    try {
+      if (lang !== "text" && hljs.getLanguage(lang)) {
+        return hljs.highlight(content, { language: lang }).value;
+      }
+    } catch {
+      // fallback to plain text
+    }
+    return null;
+  }, [content, filePath, language]);
 
   return (
     <div className="h-full flex flex-col">
@@ -125,7 +154,14 @@ export function CodeViewer({ filePath, content, language, onSave, isEditable = f
           />
         ) : (
           <pre className="p-4 text-xs font-mono leading-relaxed">
-            <code className={`language-${getLanguage()}`}>{content}</code>
+            {highlightedHtml ? (
+              <code
+                className={`language-${getLanguage()} hljs`}
+                dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+              />
+            ) : (
+              <code className={`language-${getLanguage()}`}>{content}</code>
+            )}
           </pre>
         )}
       </div>

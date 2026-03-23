@@ -5,7 +5,7 @@ import { FileTreeViewer } from "./FileTreeViewer";
 import { CodeViewer } from "./CodeViewer";
 import { ProjectPreview } from "./ProjectPreview";
 import { ChatMessage } from "./ChatMessage";
-import { X, ExternalLink, Code2, Monitor, Send, Loader, MessageSquare } from "lucide-react";
+import { X, ExternalLink, Code2, Monitor, Send, Loader, MessageSquare, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Message } from "@/lib/types";
 
 interface ProjectVisualizerProps {
@@ -30,6 +30,79 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<"idle" | "checking" | "pushing" | "success" | "error">("idle");
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [smblsInstalled, setSmblsInstalled] = useState<boolean | null>(null);
+  const [smblsLoggedIn, setSmblsLoggedIn] = useState<boolean | null>(null);
+
+  // Check smbls CLI status on mount (only for non-local projects)
+  useEffect(() => {
+    if (!isLocalFolder) {
+      fetch("/api/smbls")
+        .then(res => res.json())
+        .then(data => {
+          setSmblsInstalled(data.installed);
+          setSmblsLoggedIn(data.loggedIn);
+        })
+        .catch(() => {
+          setSmblsInstalled(false);
+          setSmblsLoggedIn(false);
+        });
+    }
+  }, [isLocalFolder]);
+
+  const handlePushToSymbols = async () => {
+    setPushStatus("checking");
+    setPushMessage(null);
+
+    try {
+      // Check status first
+      const statusRes = await fetch("/api/smbls");
+      const statusData = await statusRes.json();
+
+      if (!statusData.installed) {
+        setPushStatus("error");
+        setPushMessage("smbls CLI not installed. Run: npm i -g @symbo.ls/cli");
+        return;
+      }
+
+      if (!statusData.loggedIn) {
+        setPushStatus("error");
+        setPushMessage("Not logged in. Run 'smbls login' in your terminal first.");
+        return;
+      }
+
+      setPushStatus("pushing");
+      const pushRes = await fetch("/api/smbls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectName: currentProjectName, action: "push" }),
+      });
+
+      const pushData = await pushRes.json();
+
+      if (pushData.error) {
+        setPushStatus("error");
+        setPushMessage(pushData.error + (pushData.details ? `: ${pushData.details}` : ""));
+        return;
+      }
+
+      setPushStatus("success");
+      setPushMessage(pushData.previewUrl
+        ? `Pushed! Preview: ${pushData.previewUrl}`
+        : "Project pushed to Symbols platform successfully!"
+      );
+
+      // Reset after 5 seconds
+      setTimeout(() => {
+        setPushStatus("idle");
+        setPushMessage(null);
+      }, 5000);
+    } catch (err) {
+      setPushStatus("error");
+      setPushMessage(err instanceof Error ? err.message : "Failed to push project");
+    }
+  };
 
   // Handle local folder selection from ProjectPreview
   const handleLocalFolderSelect = (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => {
@@ -243,6 +316,36 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
             <p className="text-xs text-muted">{currentProjectName}{isLocalFolder ? " (Local)" : ""}</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Push to Symbols button */}
+            {!isLocalFolder && (
+              <button
+                onClick={handlePushToSymbols}
+                disabled={pushStatus === "checking" || pushStatus === "pushing"}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
+                  pushStatus === "success"
+                    ? "bg-success/20 text-success"
+                    : pushStatus === "error"
+                    ? "bg-error/20 text-error hover:bg-error/30"
+                    : "bg-accent/20 text-accent hover:bg-accent/30"
+                } disabled:opacity-50`}
+                title={pushMessage || "Push project to Symbols platform"}
+              >
+                {pushStatus === "checking" || pushStatus === "pushing" ? (
+                  <Loader size={12} className="animate-spin" />
+                ) : pushStatus === "success" ? (
+                  <CheckCircle size={12} />
+                ) : pushStatus === "error" ? (
+                  <AlertCircle size={12} />
+                ) : (
+                  <Upload size={12} />
+                )}
+                {pushStatus === "checking" ? "Checking..." :
+                 pushStatus === "pushing" ? "Pushing..." :
+                 pushStatus === "success" ? "Pushed!" :
+                 pushStatus === "error" ? "Retry Push" :
+                 "Push to Symbols"}
+              </button>
+            )}
             <button
               onClick={handleOpenInExplorer}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
@@ -258,6 +361,26 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
             </button>
           </div>
         </div>
+
+        {/* Push status message */}
+        {pushMessage && (
+          <div className={`px-4 py-2 text-xs flex items-center gap-2 ${
+            pushStatus === "success" ? "bg-success/10 text-success border-b border-success/20" :
+            pushStatus === "error" ? "bg-error/10 text-error border-b border-error/20" :
+            "bg-accent/10 text-accent border-b border-accent/20"
+          }`}>
+            {pushStatus === "success" ? <CheckCircle size={12} /> : 
+             pushStatus === "error" ? <AlertCircle size={12} /> :
+             <Loader size={12} className="animate-spin" />}
+            <span className="flex-1">{pushMessage}</span>
+            <button
+              onClick={() => { setPushMessage(null); if (pushStatus !== "pushing" && pushStatus !== "checking") setPushStatus("idle"); }}
+              className="hover:opacity-70"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
