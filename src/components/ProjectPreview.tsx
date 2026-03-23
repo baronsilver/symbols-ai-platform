@@ -4,12 +4,103 @@ import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
 import { getParameters } from "codesandbox/lib/api/define";
 
-// Helper to create a CodeSandbox via POST (avoids 414 URI Too Long)
+// Packages that should be loaded via CDN importmap instead of npm
+const CDN_PACKAGES: Record<string, string> = {
+  smbls: "https://unpkg.com/smbls@3/index.js",
+  "@domql/element": "https://unpkg.com/@domql/element@3/index.js",
+};
+
+// Parcel-specific devDeps that CodeSandbox doesn't need
+const SKIP_DEV_DEPS = new Set([
+  "parcel", "@parcel/babel-preset-env", "@parcel/transformer-inline-string",
+  "@parcel/transformer-raw", "@parcel/config-default",
+]);
+
+// Helper to create a CodeSandbox via POST
+// Replaces smbls with CDN imports and preserves other real npm dependencies
 async function createCodeSandbox(fileContents: Array<{ path: string; content: string }>): Promise<string> {
   const files: Record<string, { content: string; isBinary: boolean }> = {};
+
+  // Files we'll regenerate ourselves
+  const overrideFiles = new Set(["package.json", ".parcelrc", "index.html"]);
+
+  // Parse the project's package.json to extract real dependencies
+  const pkgFile = fileContents.find(f => f.path === "package.json");
+  let deps: Record<string, string> = {};
+  let devDeps: Record<string, string> = {};
+  if (pkgFile) {
+    try {
+      const pkg = JSON.parse(pkgFile.content);
+      deps = pkg.dependencies || {};
+      devDeps = pkg.devDependencies || {};
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Separate CDN-loaded deps from real npm deps
+  const npmDeps: Record<string, string> = {};
+  const cdnImports: Record<string, string> = { ...CDN_PACKAGES };
+  for (const [name, version] of Object.entries(deps)) {
+    if (CDN_PACKAGES[name]) {
+      // Already in CDN list
+    } else {
+      npmDeps[name] = version as string;
+    }
+  }
+
+  // Keep devDeps that aren't Parcel-specific
+  const npmDevDeps: Record<string, string> = {};
+  for (const [name, version] of Object.entries(devDeps)) {
+    if (!SKIP_DEV_DEPS.has(name)) {
+      npmDevDeps[name] = version as string;
+    }
+  }
+
+  // Copy all project files except the ones we override
   for (const file of fileContents) {
+    if (overrideFiles.has(file.path)) continue;
     files[file.path] = { content: file.content, isBinary: false };
   }
+
+  // Build importmap JSON
+  const importmapJson = JSON.stringify({ imports: cdnImports }, null, 4);
+
+  // Create index.html with importmap for CDN packages
+  const indexHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Symbols Preview</title>
+  <script type="importmap">
+  ${importmapJson}
+  </script>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <script type="module" src="./index.js"></script>
+</body>
+</html>`;
+
+  files["index.html"] = { content: indexHtml, isBinary: false };
+
+  // Create package.json with real npm deps only (no smbls, no Parcel)
+  const sandboxPkg: Record<string, unknown> = {
+    name: "symbols-preview",
+    version: "1.0.0",
+    main: "index.html",
+  };
+  if (Object.keys(npmDeps).length > 0) {
+    sandboxPkg.dependencies = npmDeps;
+  }
+  if (Object.keys(npmDevDeps).length > 0) {
+    sandboxPkg.devDependencies = npmDevDeps;
+  }
+  files["package.json"] = {
+    content: JSON.stringify(sandboxPkg, null, 2),
+    isBinary: false,
+  };
 
   const parameters = getParameters({ files });
 
