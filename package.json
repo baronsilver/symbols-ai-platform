@@ -9,8 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@stackblitz/sdk": "^1.11.0",
     "ai": "^6.0.116",
-    "codesandbox": "^2.2.3",
     "highlight.js": "^11.11.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.577.0",

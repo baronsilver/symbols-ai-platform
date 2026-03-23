@@ -2,121 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
-import { getParameters } from "codesandbox/lib/api/define";
+import sdk from "@stackblitz/sdk";
 
-// Packages that should be loaded via CDN importmap instead of npm
-const CDN_PACKAGES: Record<string, string> = {
-  smbls: "https://unpkg.com/smbls@3/index.js",
-  "@domql/element": "https://unpkg.com/@domql/element@3/index.js",
-};
-
-// Parcel-specific devDeps that CodeSandbox doesn't need
-const SKIP_DEV_DEPS = new Set([
-  "parcel", "@parcel/babel-preset-env", "@parcel/transformer-inline-string",
-  "@parcel/transformer-raw", "@parcel/config-default",
-]);
-
-// Helper to create a CodeSandbox via POST
-// Replaces smbls with CDN imports and preserves other real npm dependencies
-async function createCodeSandbox(fileContents: Array<{ path: string; content: string }>): Promise<string> {
-  const files: Record<string, { content: string; isBinary: boolean }> = {};
-
-  // Files we'll regenerate ourselves
-  const overrideFiles = new Set(["package.json", ".parcelrc", "index.html"]);
-
-  // Parse the project's package.json to extract real dependencies
-  const pkgFile = fileContents.find(f => f.path === "package.json");
-  let deps: Record<string, string> = {};
-  let devDeps: Record<string, string> = {};
-  if (pkgFile) {
-    try {
-      const pkg = JSON.parse(pkgFile.content);
-      deps = pkg.dependencies || {};
-      devDeps = pkg.devDependencies || {};
-    } catch { /* ignore parse errors */ }
-  }
-
-  // Separate CDN-loaded deps from real npm deps
-  const npmDeps: Record<string, string> = {};
-  const cdnImports: Record<string, string> = { ...CDN_PACKAGES };
-  for (const [name, version] of Object.entries(deps)) {
-    if (CDN_PACKAGES[name]) {
-      // Already in CDN list
-    } else {
-      npmDeps[name] = version as string;
-    }
-  }
-
-  // Keep devDeps that aren't Parcel-specific
-  const npmDevDeps: Record<string, string> = {};
-  for (const [name, version] of Object.entries(devDeps)) {
-    if (!SKIP_DEV_DEPS.has(name)) {
-      npmDevDeps[name] = version as string;
-    }
-  }
-
-  // Copy all project files except the ones we override
+// Build StackBlitz project files from generated file contents
+function buildStackBlitzFiles(fileContents: Array<{ path: string; content: string }>): Record<string, string> {
+  const files: Record<string, string> = {};
   for (const file of fileContents) {
-    if (overrideFiles.has(file.path)) continue;
-    files[file.path] = { content: file.content, isBinary: false };
+    files[file.path] = file.content;
   }
-
-  // Build importmap JSON
-  const importmapJson = JSON.stringify({ imports: cdnImports }, null, 4);
-
-  // Create index.html with importmap for CDN packages
-  const indexHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Symbols Preview</title>
-  <script type="importmap">
-  ${importmapJson}
-  </script>
-  <style>
-    body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
-  </style>
-</head>
-<body>
-  <script type="module" src="./index.js"></script>
-</body>
-</html>`;
-
-  files["index.html"] = { content: indexHtml, isBinary: false };
-
-  // Create package.json with real npm deps only (no smbls, no Parcel)
-  const sandboxPkg: Record<string, unknown> = {
-    name: "symbols-preview",
-    version: "1.0.0",
-    main: "index.html",
-  };
-  if (Object.keys(npmDeps).length > 0) {
-    sandboxPkg.dependencies = npmDeps;
-  }
-  if (Object.keys(npmDevDeps).length > 0) {
-    sandboxPkg.devDependencies = npmDevDeps;
-  }
-  files["package.json"] = {
-    content: JSON.stringify(sandboxPkg, null, 2),
-    isBinary: false,
-  };
-
-  const parameters = getParameters({ files });
-
-  const res = await fetch("https://codesandbox.io/api/v1/sandboxes/define?json=1", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ parameters }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`CodeSandbox API error ${res.status}: ${text}`);
-  }
-
-  const data = await res.json();
-  return data.sandbox_id;
+  return files;
 }
 
 interface ProjectPreviewProps {
@@ -130,8 +24,9 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeployed, setIsDeployed] = useState(false);
-  const [sandboxUrl, setSandboxUrl] = useState<string | null>(null);
+  const [stackblitzEmbedded, setStackblitzEmbedded] = useState(false);
   const [sandboxLoading, setSandboxLoading] = useState(false);
+  const stackblitzContainerRef = useState<string>(`stackblitz-${Date.now()}`)[0];
 
   useEffect(() => {
     // Check if we're in a deployed environment (no localhost)
@@ -146,8 +41,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   }, [projectName]);
 
-  // Create CodeSandbox from project files (embed in iframe)
-  const openInCodeSandbox = async () => {
+  // Embed StackBlitz preview inline
+  const embedStackBlitz = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
@@ -157,30 +52,55 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     setError(null);
 
     try {
-      const sandboxId = await createCodeSandbox(fileContents);
-      setSandboxUrl(`https://codesandbox.io/embed/${sandboxId}?codemirror=1&hidenavigation=1&theme=dark&view=preview`);
+      const files = buildStackBlitzFiles(fileContents);
+      await sdk.embedProject(
+        stackblitzContainerRef,
+        {
+          title: projectName,
+          description: "Symbols Project Preview",
+          template: "node",
+          files,
+        },
+        {
+          height: "100%",
+          openFile: "index.js",
+          view: "preview",
+          hideNavigation: true,
+          hideDevTools: true,
+          theme: "dark",
+        }
+      );
+      setStackblitzEmbedded(true);
       setStatus("running");
     } catch (err) {
-      console.error("Failed to create CodeSandbox:", err);
-      setError(err instanceof Error ? err.message : "Failed to create CodeSandbox");
+      console.error("Failed to embed StackBlitz:", err);
+      setError(err instanceof Error ? err.message : "Failed to start preview");
     } finally {
       setSandboxLoading(false);
     }
   };
 
-  // Open CodeSandbox in new tab
-  const openSandboxInNewTab = async () => {
+  // Open StackBlitz in new tab
+  const openInNewStackBlitz = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
     }
 
     try {
-      const sandboxId = await createCodeSandbox(fileContents);
-      window.open(`https://codesandbox.io/s/${sandboxId}`, "_blank");
+      const files = buildStackBlitzFiles(fileContents);
+      sdk.openProject(
+        {
+          title: projectName,
+          description: "Symbols Project Preview",
+          template: "node",
+          files,
+        },
+        { openFile: "index.js", view: "preview" }
+      );
     } catch (err) {
-      console.error("Failed to open CodeSandbox:", err);
-      setError(err instanceof Error ? err.message : "Failed to open CodeSandbox");
+      console.error("Failed to open StackBlitz:", err);
+      setError(err instanceof Error ? err.message : "Failed to open preview");
     }
   };
 
@@ -353,10 +273,13 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   };
 
-  // Close/reset sandbox
+  // Close/reset embedded preview
   const closeSandbox = () => {
-    setSandboxUrl(null);
+    setStackblitzEmbedded(false);
     setStatus("unavailable");
+    // Clear the container
+    const container = document.getElementById(stackblitzContainerRef);
+    if (container) container.innerHTML = "";
   };
 
   return (
@@ -364,8 +287,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
       {/* Controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold">{isDeployed ? "CodeSandbox Preview" : "Live Preview"}</span>
-          {(status === "running" || sandboxUrl) && (
+          <span className="text-xs font-semibold">{isDeployed ? "StackBlitz Preview" : "Live Preview"}</span>
+          {(status === "running" || stackblitzEmbedded) && (
             <span className="flex items-center gap-1 text-xs text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
               Running
@@ -381,10 +304,10 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
         <div className="flex items-center gap-2">
           {/* Deployed environment controls */}
           {isDeployed ? (
-            sandboxUrl ? (
+            stackblitzEmbedded ? (
               <>
                 <button
-                  onClick={openSandboxInNewTab}
+                  onClick={openInNewStackBlitz}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-accent/10 transition-colors"
                 >
                   <ExternalLink size={12} />
@@ -400,7 +323,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
               </>
             ) : (
               <button
-                onClick={openInCodeSandbox}
+                onClick={embedStackBlitz}
                 disabled={sandboxLoading || !fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
@@ -459,35 +382,35 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
 
       {/* Preview Area */}
       <div className="flex-1 bg-surface relative">
-        {status === "unavailable" && !sandboxUrl && (
+        {status === "unavailable" && !stackblitzEmbedded && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-accent/20 flex items-center justify-center mb-4">
               <Code2 size={24} className="text-accent" />
             </div>
             <h3 className="text-sm font-semibold mb-1">Preview Your Project</h3>
             <p className="text-xs text-muted max-w-sm mb-4">
-              Open your project in CodeSandbox to preview it live, or download the files to run locally.
+              Open your project in StackBlitz to preview it live, or download the files to run locally.
             </p>
             <div className="flex flex-col gap-2">
               <button
-                onClick={openInCodeSandbox}
+                onClick={embedStackBlitz}
                 disabled={sandboxLoading || !fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
               >
                 {sandboxLoading ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    Creating Sandbox...
+                    Starting Preview...
                   </>
                 ) : (
                   <>
                     <Play size={14} />
-                    Preview in CodeSandbox
+                    Preview in StackBlitz
                   </>
                 )}
               </button>
               <button
-                onClick={openSandboxInNewTab}
+                onClick={openInNewStackBlitz}
                 disabled={!fileContents || fileContents.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs rounded bg-accent/20 hover:bg-accent/30 text-accent transition-colors disabled:opacity-50"
               >
@@ -564,14 +487,11 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
           />
         )}
 
-        {/* CodeSandbox embed for deployed environment */}
-        {sandboxUrl && isDeployed && (
-          <iframe
-            src={sandboxUrl}
-            className="w-full h-full border-0"
-            title="CodeSandbox Preview"
-            allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
-            sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+        {/* StackBlitz embed container for deployed environment */}
+        {isDeployed && (
+          <div
+            id={stackblitzContainerRef}
+            className={`w-full h-full ${stackblitzEmbedded ? '' : 'hidden'}`}
           />
         )}
       </div>
