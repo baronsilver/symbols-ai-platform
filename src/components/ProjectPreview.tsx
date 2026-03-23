@@ -4,6 +4,30 @@ import { useState, useEffect } from "react";
 import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen, Code2 } from "lucide-react";
 import { getParameters } from "codesandbox/lib/api/define";
 
+// Helper to create a CodeSandbox via POST (avoids 414 URI Too Long)
+async function createCodeSandbox(fileContents: Array<{ path: string; content: string }>): Promise<string> {
+  const files: Record<string, { content: string; isBinary: boolean }> = {};
+  for (const file of fileContents) {
+    files[file.path] = { content: file.content, isBinary: false };
+  }
+
+  const parameters = getParameters({ files });
+
+  const res = await fetch("https://codesandbox.io/api/v1/sandboxes/define?json=1", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parameters }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`CodeSandbox API error ${res.status}: ${text}`);
+  }
+
+  const data = await res.json();
+  return data.sandbox_id;
+}
+
 interface ProjectPreviewProps {
   projectName: string;
   fileContents?: Array<{ path: string; content: string }>;
@@ -31,7 +55,7 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     }
   }, [projectName]);
 
-  // Create CodeSandbox from project files
+  // Create CodeSandbox from project files (embed in iframe)
   const openInCodeSandbox = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
@@ -42,20 +66,8 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     setError(null);
 
     try {
-      // Convert file contents to CodeSandbox format
-      const files: Record<string, { content: string; isBinary: boolean }> = {};
-      
-      for (const file of fileContents) {
-        files[file.path] = { content: file.content, isBinary: false };
-      }
-
-      // Generate CodeSandbox parameters
-      const parameters = getParameters({ files });
-      
-      // Create the sandbox URL
-      const sandboxEmbedUrl = `https://codesandbox.io/api/v1/sandboxes/define?parameters=${parameters}&embed=1&codemirror=1&hidenavigation=1&theme=dark`;
-      
-      setSandboxUrl(sandboxEmbedUrl);
+      const sandboxId = await createCodeSandbox(fileContents);
+      setSandboxUrl(`https://codesandbox.io/embed/${sandboxId}?codemirror=1&hidenavigation=1&theme=dark&view=preview`);
       setStatus("running");
     } catch (err) {
       console.error("Failed to create CodeSandbox:", err);
@@ -66,21 +78,15 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
   };
 
   // Open CodeSandbox in new tab
-  const openSandboxInNewTab = () => {
+  const openSandboxInNewTab = async () => {
     if (!fileContents || fileContents.length === 0) {
       setError("No files to preview. Generate a project first.");
       return;
     }
 
     try {
-      const files: Record<string, { content: string; isBinary: boolean }> = {};
-      for (const file of fileContents) {
-        files[file.path] = { content: file.content, isBinary: false };
-      }
-
-      const parameters = getParameters({ files });
-      const url = `https://codesandbox.io/api/v1/sandboxes/define?parameters=${parameters}`;
-      window.open(url, "_blank");
+      const sandboxId = await createCodeSandbox(fileContents);
+      window.open(`https://codesandbox.io/s/${sandboxId}`, "_blank");
     } catch (err) {
       console.error("Failed to open CodeSandbox:", err);
       setError(err instanceof Error ? err.message : "Failed to open CodeSandbox");
