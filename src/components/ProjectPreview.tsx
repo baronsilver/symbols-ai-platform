@@ -117,6 +117,7 @@ npm start`;
 
       await readDirectory(dirHandle);
       setLocalFolderName(dirHandle.name);
+      setStatus("stopped"); // Show instructions instead of download screen
       onLocalFolderSelect?.(dirHandle.name, files, fileContentsArray);
     } catch (err) {
       console.error("Failed to select folder:", err);
