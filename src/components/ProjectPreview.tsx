@@ -23,10 +23,17 @@ export function ProjectPreview({ projectName, fileContents, onLocalFolderSelect 
     const isLocalhost = typeof window !== "undefined" &&
       (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
     setIsDeployed(!isLocalhost);
-    if (!isLocalhost) {
-      setStatus("unavailable");
-    }
   }, []);
+
+  // Reset preview state when opening/switching projects.
+  // Users should explicitly start their dev server before previewing.
+  useEffect(() => {
+    setPreviewUrl(null);
+    setError(null);
+    setCopied(false);
+    setLocalFolderName(null);
+    setStatus("stopped");
+  }, [projectName]);
 
   const startPreview = async () => {
     setPreviewUrl(`http://localhost:${PREVIEW_PORT}`);

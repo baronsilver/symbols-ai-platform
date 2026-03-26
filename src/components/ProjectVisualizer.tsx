@@ -55,6 +55,24 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
     setPushStatus("checking");
     setPushMessage(null);
 
+    const manualInstructions = [
+      "This web environment can't run your local smbls CLI.",
+      "Run these commands in your terminal:",
+      `cd output/${currentProjectName}`,
+      "npm i -g @symbo.ls/cli",
+      "smbls login",
+      "smbls push",
+    ].join("\n");
+
+    const isLocalhost = typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
+    if (!isLocalhost) {
+      setPushStatus("idle");
+      setPushMessage(manualInstructions);
+      return;
+    }
+
     try {
       // Check status first
       const statusRes = await fetch("/api/smbls");
