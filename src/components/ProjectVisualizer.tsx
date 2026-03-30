@@ -35,6 +35,15 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   const [smblsInstalled, setSmblsInstalled] = useState<boolean | null>(null);
   const [smblsLoggedIn, setSmblsLoggedIn] = useState<boolean | null>(null);
 
+  // Get API key from localStorage for the AI Edit chat
+  const getApiKey = (): { key: string; provider: "openrouter" | "claude" } | null => {
+    if (typeof window === "undefined") return null;
+    const provider = localStorage.getItem("api-provider") as "openrouter" | "claude" | null;
+    if (!provider) return null;
+    const key = localStorage.getItem(provider === "claude" ? "claude-api-key" : "openrouter-api-key");
+    return key ? { key, provider } : null;
+  };
+
   // Check smbls CLI status on mount (only for non-local projects)
   useEffect(() => {
     if (!isLocalFolder) {
@@ -186,21 +195,40 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
         ? [{ role: "system", content: contextMessage }, ...chatMessages.map(m => ({ role: m.role, content: m.content })), { role: "user", content: userMessageContent }]
         : chatMessages.map(m => ({ role: m.role, content: m.content })).concat([{ role: "user", content: userMessageContent }]);
 
+      // Get API credentials
+      const apiCreds = getApiKey();
+      if (!apiCreds) {
+        throw new Error("No API key configured. Please set your API key in Settings.");
+      }
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-api-provider": apiCreds.provider,
+        "x-api-key": apiCreds.key,
+      };
+
+      // Use the model appropriate for the provider
+      const model = apiCreds.provider === "claude" ? "claude-opus-4-6" : "anthropic/claude-opus-4.6";
+
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-api-provider": "claude",
-        },
+        headers,
         body: JSON.stringify({
           messages: messagesWithContext,
-          model: "claude-opus-4-6",
+          model,
           autoMcp: !isLocalFolder, // Disable MCP for local folders since we have the content
           activeProject: isLocalFolder ? undefined : currentProjectName,
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to get response");
+      if (!res.ok) {
+        let errorMsg = `Request failed: ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData.error) errorMsg = errData.error;
+        } catch { /* ignore */ }
+        throw new Error(errorMsg);
+      }
 
       // Add assistant message and stream into it
       setChatMessages((prev) => [...prev, assistantMessage]);

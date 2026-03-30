@@ -128,7 +128,7 @@ export function getEssentialProjectFiles(): GeneratedFile[] {
     },
     {
       path: "index.js",
-      content: `'use strict'\n\nimport { create } from 'smbls'\nimport * as app from './smbls'\n\ncreate({}, app)\n`
+      content: `'use strict'\n\nimport { create } from 'smbls'\nimport app from './smbls/app.js'\n\ncreate(app)\n`
     },
     {
       path: "package.json",
@@ -192,10 +192,21 @@ async function createProjectRootFiles(projectDir: string): Promise<void> {
     "utf-8"
   );
 
-  // index.js - entry point, imports smbls/ directory as namespace (like symbols-ai-test)
+  // index.js - entry point, matches the symbols/index.js pattern
+  // The second arg (app) must be the root component, NOT the smbls namespace
   await fs.writeFile(
     path.join(projectDir, "index.js"),
-    `'use strict'\n\nimport { create } from 'smbls'\nimport * as app from './smbls'\n\ncreate({}, app)\n`,
+    `'use strict'\n\nimport { create } from 'smbls'\nimport app from './smbls/app.js'\n\ncreate(app)\n`,
+    "utf-8"
+  );
+
+  // Create a minimal smbls/index.js so Parcel can resolve the local './smbls' import
+  // This gets overwritten by createPlaceholderIndexFiles when actual files are generated
+  const smblsDir = path.join(projectDir, "smbls");
+  await fs.mkdir(smblsDir, { recursive: true });
+  await fs.writeFile(
+    path.join(smblsDir, "index.js"),
+    `// Minimal smbls entry - placeholder until actual project files are generated\nexport default {}\n`,
     "utf-8"
   );
 
@@ -292,6 +303,9 @@ async function createPlaceholderIndexFiles(projectDir: string, generatedFiles: G
           return `export { ${componentName} } from './${fileName}'`;
         }).join("\n");
         await fs.writeFile(indexPath, reExports ? `${reExports}\n` : "export default {}\n", "utf-8");
+      } else if (dir === "components" && !referencedDirs.has("components")) {
+        // components dir exists but no specific files referenced yet - create empty export
+        await fs.writeFile(indexPath, "export default {}\n", "utf-8");
       } else {
         await fs.writeFile(indexPath, "export default {}\n", "utf-8");
       }
@@ -312,18 +326,17 @@ async function createPlaceholderIndexFiles(projectDir: string, generatedFiles: G
     const hasEnvs = generatedFiles.some(f => f.path.match(/smbls[/\\]envs\.js/));
 
     const exports: string[] = [];
+    // Always include these standard exports
+    // The smbls/index.js should match the reference project's patterns
+    // Note: 'export * as components' is OK here because components/index.js uses named re-exports
+    // (export { Foo } from './Foo.js'), so the namespace gets flattened properly.
+    exports.push(`export * as components from './components/index.js'`);
+    exports.push(`export { default as pages } from './pages/index.js'`);
+    exports.push(`export { default as designSystem } from './designSystem/index.js'`);
+    if (hasConfig) exports.push(`export { default as config } from './config.js'`);
     if (hasState) exports.push(`export { default as state } from './state.js'`);
     if (hasDeps) exports.push(`export { default as dependencies } from './dependencies.js'`);
-    // Always include these standard exports
-    exports.push(`export * as components from './components/index.js'`);
-    exports.push(`export * as snippets from './snippets/index.js'`);
-    exports.push(`export { default as pages } from './pages/index.js'`);
-    exports.push(`export * as functions from './functions/index.js'`);
-    exports.push(`export * as methods from './methods/index.js'`);
-    exports.push(`export { default as designSystem } from './designSystem/index.js'`);
-    exports.push(`export { default as files } from './files/index.js'`);
     if (hasShared) exports.push(`export { default as sharedLibraries } from './sharedLibraries.js'`);
-    if (hasConfig) exports.push(`export { default as config } from './config.js'`);
     if (hasEnvs) exports.push(`export { default as envs } from './envs.js'`);
 
     const content = exports.length > 0 ? `${exports.join("\n")}\n` : `export default {}\n`;

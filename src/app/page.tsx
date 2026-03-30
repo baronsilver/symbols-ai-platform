@@ -334,7 +334,7 @@ ${code}
 
 5. **No Imports**: No imports between component files - components reference each other by name only
 
-6. **flexAlign**: Use \`flexAlign: 'center space-between'\` NOT \`align\` or \`justify\`
+6. **Flex Alignment**: Use \`align: 'center center'\` (first = alignItems, second = justifyContent). E.g., \`align: 'center space-between'\` means align-items:center + justify-content:space-between. Do NOT use \`flexAlign\` which doesn't exist.
 
 **IMPORTANT:** Follow all Symbols v3 rules - components are objects (not functions), use spacing tokens, no imports between component files.`;
                   
