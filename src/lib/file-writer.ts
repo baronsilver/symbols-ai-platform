@@ -175,7 +175,7 @@ function sanitizeGeneratedContent(path: string, content: string): string {
 
   return content;
 }
- * This allows them to be included in client downloads even when filesystem is read-only.
+ /* This allows them to be included in client downloads even when filesystem is read-only.
  */
 export function getEssentialProjectFiles(): GeneratedFile[] {
   return [
