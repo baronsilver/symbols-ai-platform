@@ -6,7 +6,12 @@ import { Play, Square, ExternalLink, Loader2, AlertCircle, Download, FolderOpen,
 interface ProjectPreviewProps {
   projectName: string;
   fileContents?: Array<{ path: string; content: string }>;
-  onLocalFolderSelect?: (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => void;
+  onLocalFolderSelect?: (
+    folderName: string,
+    files: string[],
+    fileContents: Array<{ path: string; content: string }>,
+    dirHandle?: any
+  ) => void;
 }
 
 const PREVIEW_PORT = 1234;
@@ -125,7 +130,7 @@ npm start`;
       await readDirectory(dirHandle);
       setLocalFolderName(dirHandle.name);
       setStatus("stopped"); // Show instructions instead of download screen
-      onLocalFolderSelect?.(dirHandle.name, files, fileContentsArray);
+      onLocalFolderSelect?.(dirHandle.name, files, fileContentsArray, dirHandle);
     } catch (err) {
       console.error("Failed to select folder:", err);
       setError(err instanceof Error ? err.message : "Failed to select folder");

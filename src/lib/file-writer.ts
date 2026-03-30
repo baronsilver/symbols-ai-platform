@@ -128,7 +128,7 @@ export function getEssentialProjectFiles(): GeneratedFile[] {
     },
     {
       path: "index.js",
-      content: `'use strict'\n\nimport { create } from 'smbls'\nimport app from './smbls/app.js'\n\ncreate(app)\n`
+      content: `'use strict'\n\nimport { create } from 'smbls'\nimport { app } from './smbls'\n\ncreate(app)\n`
     },
     {
       path: "package.json",
@@ -165,6 +165,42 @@ export function getEssentialProjectFiles(): GeneratedFile[] {
           "*.svg": ["@parcel/transformer-inline-string"]
         }
       }, null, 2)
+    },
+    // smbls/app.js — the root component, required by smbls/index.js → index.js
+    {
+      path: "smbls/app.js",
+      content: `export default {
+  tag: 'main',
+  id: 'app',
+  padding: '0',
+  margin: '0',
+  minHeight: '100vh'
+}
+`
+    },
+    // smbls/index.js — the smbls namespace barrel, exports { app } for index.js
+    {
+      path: "smbls/index.js",
+      content: `export { default as app } from './app.js'
+export * as components from './components/index.js'
+export { default as pages } from './pages/index.js'
+export { default as designSystem } from './designSystem/index.js'
+`
+    },
+    // smbls/components/index.js — placeholder, re-exported components go here
+    {
+      path: "smbls/components/index.js",
+      content: `export default {}\n`
+    },
+    // smbls/pages/index.js — route registry
+    {
+      path: "smbls/pages/index.js",
+      content: `export default {}\n`
+    },
+    // smbls/designSystem/index.js — design tokens placeholder
+    {
+      path: "smbls/designSystem/index.js",
+      content: `export default {}\n`
     }
   ];
 }
@@ -192,11 +228,12 @@ async function createProjectRootFiles(projectDir: string): Promise<void> {
     "utf-8"
   );
 
-  // index.js - entry point, matches the symbols/index.js pattern
-  // The second arg (app) must be the root component, NOT the smbls namespace
+  // index.js - entry point
+  // Import app from the smbls namespace. smbls/index.js always exports { app }.
+  // This way Parcel resolves ./smbls → ./smbls/index.js even if smbls/app.js doesn't exist yet.
   await fs.writeFile(
     path.join(projectDir, "index.js"),
-    `'use strict'\n\nimport { create } from 'smbls'\nimport app from './smbls/app.js'\n\ncreate(app)\n`,
+    `'use strict'\n\nimport { create } from 'smbls'\nimport { app } from './smbls'\n\ncreate(app)\n`,
     "utf-8"
   );
 
@@ -284,11 +321,15 @@ async function createPlaceholderIndexFiles(projectDir: string, generatedFiles: G
   // Create placeholder index.js for each standard directory that doesn't have one
   for (const dir of standardDirs) {
     const indexPath = path.join(projectDir, "smbls", dir, "index.js");
-    const hasIndexFile = generatedFiles.some(f => 
+    const generatedIndex = generatedFiles.find(f => 
       f.path === `smbls/${dir}/index.js` || f.path === `smbls\\${dir}\\index.js`
     );
+    // Skip if AI generated a non-empty index.js (e.g. pages/index.js with actual routes)
+    const hasRealIndex = generatedIndex && 
+      generatedIndex.content.trim() !== "" && 
+      generatedIndex.content.trim() !== "export default {}";
 
-    if (!hasIndexFile && (referencedDirs.has(dir) || standardDirs.includes(dir))) {
+    if (!hasRealIndex) {
       const dirPath = path.dirname(indexPath);
       await fs.mkdir(dirPath, { recursive: true });
       
@@ -326,8 +367,9 @@ async function createPlaceholderIndexFiles(projectDir: string, generatedFiles: G
     const hasEnvs = generatedFiles.some(f => f.path.match(/smbls[/\\]envs\.js/));
 
     const exports: string[] = [];
+    // Always export app from smbls/index.js — index.js imports { app } from './smbls'
+    exports.push(`export { default as app } from './app.js'`);
     // Always include these standard exports
-    // The smbls/index.js should match the reference project's patterns
     // Note: 'export * as components' is OK here because components/index.js uses named re-exports
     // (export { Foo } from './Foo.js'), so the namespace gets flattened properly.
     exports.push(`export * as components from './components/index.js'`);
@@ -338,9 +380,7 @@ async function createPlaceholderIndexFiles(projectDir: string, generatedFiles: G
     if (hasDeps) exports.push(`export { default as dependencies } from './dependencies.js'`);
     if (hasShared) exports.push(`export { default as sharedLibraries } from './sharedLibraries.js'`);
     if (hasEnvs) exports.push(`export { default as envs } from './envs.js'`);
-
-    const content = exports.length > 0 ? `${exports.join("\n")}\n` : `export default {}\n`;
-
+    const content = `${exports.join("\n")}\n`;
     await fs.writeFile(path.join(smblsDir, "index.js"), content, "utf-8");
   }
 }
@@ -375,10 +415,8 @@ export async function writeGeneratedFiles(
       written.push(file.path);
     }
 
-    // Create placeholder index.js files for any missing directories
-    await createPlaceholderIndexFiles(projectDir, files);
-
-    // Create default app.js if not generated
+    // Create default app.js FIRST — before smbls/index.js tries to import it.
+    // index.js imports { app } from './smbls', so smbls/index.js must export app.
     const hasAppJs = files.some(f => f.path.match(/smbls[/\\]app\.js$/));
     if (!hasAppJs) {
       await fs.writeFile(
@@ -393,6 +431,9 @@ export async function writeGeneratedFiles(
         "utf-8"
       );
     }
+
+    // Create placeholder index.js files for any missing directories
+    await createPlaceholderIndexFiles(projectDir, files);
 
     // Ensure pages directory and index.js exist (but don't override AI-generated main.js)
     const hasPages = files.some(f => f.path.match(/smbls[/\\]pages[/\\]/));

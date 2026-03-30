@@ -91,7 +91,7 @@ CRITICAL RULES:
 Always generate complete file contents, never partial snippets. Include all required project structure files based on the reference project.`;
 
 export async function POST(req: NextRequest) {
-  const { messages, model, autoMcp, goal, task, projectName: customProjectName, activeProject } = await req.json();
+  const { messages, model, autoMcp, goal, task, projectName: customProjectName, activeProject, skipServerWrite } = await req.json();
   let apiProvider = req.headers.get("x-api-provider") as "openrouter" | "claude" | null;
   const apiKeyHeader = req.headers.get("x-api-key");
   
@@ -223,6 +223,9 @@ ${projectContext}`,
 
         const maxToolRounds = 5;
         let toolRound = 0;
+
+        // Determine which project name to use for tool calls (same logic as final save)
+        const toolProjectName = activeProject || customProjectName?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || null;
 
         async function runStream(conv: OpenRouterMessage[]) {
           toolCallBuffer = null;
@@ -404,9 +407,16 @@ ${projectContext}`,
             const toolFiles = parseGeneratedFiles(result);
             console.log(`[chat] Tool ${tc.name} parsed files:`, toolFiles.length);
             if (toolFiles.length > 0) {
-              const projectName = `symbols-project-${Date.now()}`;
-              const written = await writeGeneratedFiles(toolFiles, projectName);
-              send({ type: "files", projectName, files: written });
+              const projectName = toolProjectName || `symbols-project-${Date.now()}`;
+
+              // For local folders, skip server-side file writes — client persists directly
+              if (!skipServerWrite) {
+                await writeGeneratedFiles(toolFiles, projectName);
+              }
+
+              // Always send fileContents to the client so it can update local state
+              const fileContents = toolFiles.map(f => ({ path: f.path, content: f.content }));
+              send({ type: "files", projectName, files: toolFiles.map(f => f.path), fileContents });
             }
           }
         }
@@ -446,14 +456,16 @@ ${projectContext}`,
             finalProjectName = `symbols-project-${Date.now()}`;
           }
           
-          // Try to write files to disk (may fail on read-only filesystems like Railway)
-          const written = await writeGeneratedFiles(files, finalProjectName);
+          // Write files to disk unless this is a local folder (client persists directly)
+          let written: string[] = [];
+          if (!skipServerWrite) {
+            written = await writeGeneratedFiles(files, finalProjectName);
+          }
           
-          // Get essential project files (package.json, index.html, index.js, .parcelrc)
-          // These are needed to run the project but may not be written on read-only filesystems
+          // Always include essential files + AI-generated files in the response
+          // For local folders: essential files = the ZIP bundle the user downloaded
+          // For server projects: essential files = everything needed to complete the project
           const essentialFiles = getEssentialProjectFiles();
-          
-          // Combine AI-generated files with essential files for complete project
           const allFileContents = [...essentialFiles, ...files];
           const allFilePaths = [...essentialFiles.map(f => f.path), ...written];
           
@@ -462,7 +474,7 @@ ${projectContext}`,
             type: "files", 
             projectName: finalProjectName, 
             files: allFilePaths,
-            fileContents: allFileContents // Include ALL files for client-side storage/download
+            fileContents: allFileContents
           });
         }
 
