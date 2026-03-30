@@ -1,6 +1,5 @@
 export default {
   // Semantic color pairs [dark, light] for adaptive theming
-  // --colorName opacity tone format: opacity is 0-1, tone is +N/-N RGB delta or =N HSL lightness %
   title: ['--gray 1 -168', '--gray 1 +168'],
   caption: ['--gray 1 -68', '--gray 1 +68'],
   paragraph: ['--gray 1 -42', '--gray 1 +42'],
