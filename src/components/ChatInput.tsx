@@ -47,10 +47,6 @@ export function ChatInput({ onSend, isLoading, disabled, activeProject }: ChatIn
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            aria-label={activeProject
-              ? `Chat input for editing ${activeProject}. Press Enter to send.`
-              : "Chat input to describe the Symbols project you want to create. Press Enter to send."}
-            aria-multiline="true"
             placeholder={activeProject 
               ? `Ask me to edit ${activeProject}... (e.g., "fix the navbar", "add a cart modal")`
               : "Describe the Symbols project you want to create..."

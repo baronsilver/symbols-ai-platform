@@ -41,45 +41,11 @@ CRITICAL WORKFLOW - MANDATORY VERIFICATION:
 - NEVER leave smbls/index.js without state and config exports
 
 REFERENCE PROJECT USAGE:
-- Follow the folder structure: smbls/components/, smbls/pages/, smbls/designSystem/, etc.
-- Components use named exports (export const Navbar = { })
-- Pages export a routes object: export default { '/': main }
-- The root entry point (index.js) calls create(), but component/page files do NOT
-
-CORRECT smbls/ STRUCTURE (component file):
-\`\`\`js // smbls/components/Navbar.js
-export const Navbar = {
-  extends: 'Flex',
-  flow: 'row',
-  children: [Logo, SearchPill, RightSection]
-}
-\`\`\`
-
-CORRECT smbls/pages/index.js:
-\`\`\`js
-import { main } from './main.js'
-export default {
-  '/': main
-}
-\`\`\`
-
-Page files use named exports. Route registry uses default export.
-
-CORRECT smbls/index.js (root namespace):
-\`\`\`js
-export { default as app } from './app.js'
-export * as components from './components/index.js'
-export { default as pages } from './pages/index.js'
-export { default as designSystem } from './designSystem/index.js'
-\`\`\`
-
-WRONG (NEVER do this):
-\`\`\`js
-import { create } from 'smbls'
-import app from './smbls/index.js'
-create(app)
-\`\`\`
-Never put create() or smbls imports in files other than the root index.js.
+- Use the symbols/index.js pattern for imports and create() setup
+- Follow the symbols/config.js structure for configuration
+- Mirror the folder structure: components/, pages/, functions/, designSystem/, etc.
+- Match the export patterns in each directory's index.js
+- Apply the same coding style and conventions
 
 When generating or editing project files, you MUST format each file exactly as follows:
 
@@ -125,7 +91,7 @@ CRITICAL RULES:
 Always generate complete file contents, never partial snippets. Include all required project structure files based on the reference project.`;
 
 export async function POST(req: NextRequest) {
-  const { messages, model, autoMcp, goal, task, projectName: customProjectName, activeProject, skipServerWrite } = await req.json();
+  const { messages, model, autoMcp, goal, task, projectName: customProjectName, activeProject } = await req.json();
   let apiProvider = req.headers.get("x-api-provider") as "openrouter" | "claude" | null;
   const apiKeyHeader = req.headers.get("x-api-key");
   
@@ -257,9 +223,6 @@ ${projectContext}`,
 
         const maxToolRounds = 5;
         let toolRound = 0;
-
-        // Determine which project name to use for tool calls (same logic as final save)
-        const toolProjectName = activeProject || customProjectName?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || null;
 
         async function runStream(conv: OpenRouterMessage[]) {
           toolCallBuffer = null;
@@ -441,16 +404,9 @@ ${projectContext}`,
             const toolFiles = parseGeneratedFiles(result);
             console.log(`[chat] Tool ${tc.name} parsed files:`, toolFiles.length);
             if (toolFiles.length > 0) {
-              const projectName = toolProjectName || `symbols-project-${Date.now()}`;
-
-              // For local folders, skip server-side file writes — client persists directly
-              if (!skipServerWrite) {
-                await writeGeneratedFiles(toolFiles, projectName);
-              }
-
-              // Always send fileContents to the client so it can update local state
-              const fileContents = toolFiles.map(f => ({ path: f.path, content: f.content }));
-              send({ type: "files", projectName, files: toolFiles.map(f => f.path), fileContents });
+              const projectName = `symbols-project-${Date.now()}`;
+              const written = await writeGeneratedFiles(toolFiles, projectName);
+              send({ type: "files", projectName, files: written });
             }
           }
         }
@@ -490,76 +446,23 @@ ${projectContext}`,
             finalProjectName = `symbols-project-${Date.now()}`;
           }
           
-          // Write files to disk unless this is a local folder (client persists directly)
-          let written: string[] = [];
-          if (!skipServerWrite) {
-            written = await writeGeneratedFiles(files, finalProjectName);
-          }
+          // Try to write files to disk (may fail on read-only filesystems like Railway)
+          const written = await writeGeneratedFiles(files, finalProjectName);
           
-          // Build the file bundle for the client (ZIP download).
-          // Essential scaffold files are ALWAYS the primary source to ensure correct structure.
-          // AI-generated files supplement missing paths only.
-          // For scaffold index.js files (like smbls/pages/index.js), the essential fallback
-          // is used if the AI's version has empty/broken content.
+          // Get essential project files (package.json, index.html, index.js, .parcelrc)
+          // These are needed to run the project but may not be written on read-only filesystems
           const essentialFiles = getEssentialProjectFiles();
-          const essentialPaths = new Set(essentialFiles.map(f => f.path));
-
-          // Check if a scaffold index.js has meaningful content (beyond stripped imports)
-          const isMeaningfulScaffold = (content: string, filePath: string): boolean => {
-            if (filePath === "index.js") return content.includes("create(");
-            if (filePath === "smbls/index.js") return content.includes("export");
-            if (filePath === "smbls/app.js") return content.includes("export default");
-            if (filePath.endsWith("/index.js")) {
-              const hasNamedExports = content.includes("export {") || content.includes("export *");
-              const hasRealRoutes = content.includes("'/") || content.includes('"/');
-              const hasDefaultExport = content.includes("export default");
-              return hasNamedExports || hasRealRoutes || hasDefaultExport;
-            }
-            return true;
-          };
-
-          const allFileContents: Array<{ path: string; content: string }> = [];
-          const allFilePaths: string[] = [];
-          const seenPaths = new Set<string>();
-
-          const addFile = (f: { path: string; content: string }) => {
-            if (!seenPaths.has(f.path)) {
-              seenPaths.add(f.path);
-              allFileContents.push(f);
-              allFilePaths.push(f.path);
-            }
-          };
-
-          // First: essential scaffold files (primary source, correct by definition)
-          for (const ef of essentialFiles) {
-            const aiFile = files.find(f => f.path === ef.path);
-            if (aiFile) {
-              // Prefer AI file only if it has meaningful content; otherwise use essential
-              if (isMeaningfulScaffold(aiFile.content, ef.path)) {
-                addFile(aiFile);
-              } else {
-                addFile(ef); // Use correct essential fallback
-              }
-            } else {
-              // No AI file — always use essential
-              addFile(ef);
-            }
-          }
-
-          // Second: AI-generated files that don't overlap with essential paths
-          // These supplement the bundle (e.g., components, pages, state, design tokens)
-          for (const f of files) {
-            if (!essentialPaths.has(f.path)) {
-              addFile(f);
-            }
-          }
+          
+          // Combine AI-generated files with essential files for complete project
+          const allFileContents = [...essentialFiles, ...files];
+          const allFilePaths = [...essentialFiles.map(f => f.path), ...written];
           
           // Send full file contents to client so it can handle storage
           send({ 
             type: "files", 
             projectName: finalProjectName, 
             files: allFilePaths,
-            fileContents: allFileContents
+            fileContents: allFileContents // Include ALL files for client-side storage/download
           });
         }
 

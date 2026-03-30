@@ -1,58 +1,18 @@
 "use client";
 
-import { FolderOpen, FileCode, Code2, Download } from "lucide-react";
+import { FolderOpen, FileCode, Eye, Code2 } from "lucide-react";
 
 interface GeneratedFilesPanelProps {
   projectName: string;
   files: string[];
-  fileContents?: Array<{ path: string; content: string }>;
   onViewProject?: () => void;
 }
 
 export function GeneratedFilesPanel({
   projectName,
   files,
-  fileContents,
   onViewProject,
 }: GeneratedFilesPanelProps) {
-  const downloadProject = async () => {
-    if (!fileContents || fileContents.length === 0) {
-      alert("No files to download. Generate a project first.");
-      return;
-    }
-
-    try {
-      const JSZip = (await import("jszip")).default;
-      const zip = new JSZip();
-
-      for (const file of fileContents) {
-        zip.file(file.path, file.content);
-      }
-
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${projectName}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Failed to create ZIP:", err);
-      // Fallback: download as plain text
-      const content = fileContents.map(f =>
-        `// FILE: ${f.path}\n${f.content}\n`
-      ).join("\n" + "=".repeat(80) + "\n\n");
-
-      const blob = new Blob([content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${projectName}-files.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  };
-
   return (
     <div className="mx-4 mb-3 p-4 rounded-lg bg-success/10 border border-success/20">
       <div className="flex items-center justify-between mb-3">
@@ -78,25 +38,15 @@ export function GeneratedFilesPanel({
           </div>
         ))}
       </div>
-      <div className="flex gap-2">
+      {onViewProject && (
         <button
-          onClick={downloadProject}
-          disabled={!fileContents || fileContents.length === 0}
-          className="flex items-center justify-center gap-2 flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-accent hover:bg-accent/90 text-white transition-colors disabled:opacity-50"
+          onClick={onViewProject}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-accent hover:bg-accent/90 text-white transition-colors"
         >
-          <Download size={16} />
-          Download ZIP
+          <Code2 size={16} />
+          Open Project
         </button>
-        {onViewProject && (
-          <button
-            onClick={onViewProject}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-surface-2 hover:bg-border text-foreground transition-colors"
-          >
-            <Code2 size={16} />
-            Open Project
-          </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }

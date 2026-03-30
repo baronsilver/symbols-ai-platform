@@ -68,23 +68,24 @@ This is the **only** file where cross-file imports are permitted.
 
 ---
 
-## 6. For images, use `extends: 'Img'`
+## 6. For images, NEVER use `extends: 'Img'` or `extends: 'Image'`
 
 ```js
 // CORRECT
-{ extends: 'Img', src: '...', width: '100%' }
+{ extends: 'Flex', tag: 'img', src: '...', width: '100px', height: '100px', objectFit: 'cover' }
 
-// WRONG — bypasses Img component benefits
-{ tag: 'img', src: '...' }
+// WRONG — does not exist
+{ extends: 'Img', src: '...' }
+{ extends: 'Image', src: '...' }
 ```
 
 ---
 
-## 7. Use `align` for Flex shorthand
+## 7. Use `flexAlign` not `align` for Flex shorthand
 
 ```js
-{ extends: 'Flex', flow: 'x', align: 'center center' }  // CORRECT: alignItems justifyContent
-{ extends: 'Flex', flexAlign: 'center center' }          // WRONG — no such property
+{ extends: 'Flex', flexAlign: 'center center' }  // CORRECT
+{ extends: 'Flex', align: 'center center' }       // WRONG — no effect
 ```
 
 ---
@@ -96,16 +97,7 @@ onClick: (e, el, s) => s.update({ count: s.count + 1 })  // CORRECT
 onClick: (e, el, s) => { s.count = s.count + 1 }          // WRONG — no re-render
 ```
 
-For UI-only changes (modal open/close, toggles, etc.), pass `{ preventFetch: true }`:
-```js
-onClick: (e, el, s) => s.root.update({ modalOpen: true }, { preventFetch: true })
-```
-
-For lifecycle events (onRender, onInit, onUpdate), the first param is the element, not an event:
-```js
-onInit: (el, s) => { /* CORRECT — el is element, s is state */ }
-onClick: (e, el, s) => { /* CORRECT — e is event, el is element, s is state */ }
-```
+Root-level state (global): `s.root.update({ key: val })`
 
 ---
 

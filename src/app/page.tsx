@@ -334,7 +334,7 @@ ${code}
 
 5. **No Imports**: No imports between component files - components reference each other by name only
 
-6. **Flex Alignment**: Use \`align: 'center center'\` (first = alignItems, second = justifyContent). E.g., \`align: 'center space-between'\` means align-items:center + justify-content:space-between. Do NOT use \`flexAlign\` which doesn't exist.
+6. **flexAlign**: Use \`flexAlign: 'center space-between'\` NOT \`align\` or \`justify\`
 
 **IMPORTANT:** Follow all Symbols v3 rules - components are objects (not functions), use spacing tokens, no imports between component files.`;
                   
@@ -382,7 +382,6 @@ ${code}
               <GeneratedFilesPanel
                 projectName={generatedFiles.projectName}
                 files={generatedFiles.files}
-                fileContents={generatedFiles.fileContents}
                 onViewProject={() => setShowVisualizer(true)}
               />
             )}
@@ -425,8 +424,6 @@ ${code}
           projectName={"projectName" in displayProject ? displayProject.projectName : displayProject.name}
           files={displayProject.files}
           fileContents={"fileContents" in displayProject ? displayProject.fileContents : undefined}
-          model={model}
-          apiProvider={apiProvider}
           onClose={() => {
             setShowVisualizer(false);
             setSelectedProject(null);

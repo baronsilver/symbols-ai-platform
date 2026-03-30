@@ -12,12 +12,10 @@ interface ProjectVisualizerProps {
   projectName: string;
   files: string[];
   fileContents?: Array<{ path: string; content: string }>;
-  model: string;
-  apiProvider: "openrouter" | "claude";
   onClose: () => void;
 }
 
-export function ProjectVisualizer({ projectName: initialProjectName, files: initialFiles, fileContents: initialFileContents, model, apiProvider, onClose }: ProjectVisualizerProps) {
+export function ProjectVisualizer({ projectName: initialProjectName, files: initialFiles, fileContents: initialFileContents, onClose }: ProjectVisualizerProps) {
   const [currentProjectName, setCurrentProjectName] = useState(initialProjectName);
   const [currentFiles, setCurrentFiles] = useState(initialFiles);
   const [currentFileContents, setCurrentFileContents] = useState(initialFileContents);
@@ -32,7 +30,6 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  const [filesUpdated, setFilesUpdated] = useState(false);
   const [pushStatus, setPushStatus] = useState<"idle" | "checking" | "pushing" | "success" | "error">("idle");
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [smblsInstalled, setSmblsInstalled] = useState<boolean | null>(null);
@@ -126,17 +123,11 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   };
 
   // Handle local folder selection from ProjectPreview
-  const handleLocalFolderSelect = (
-    folderName: string,
-    files: string[],
-    fileContents: Array<{ path: string; content: string }>,
-    dirHandle?: any
-  ) => {
+  const handleLocalFolderSelect = (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => {
     setCurrentProjectName(folderName);
     setCurrentFiles(files);
     setCurrentFileContents(fileContents);
     setIsLocalFolder(true);
-    setLocalDirHandle(dirHandle || null);
     setSelectedFile(null);
     setFileContent("");
     setActiveTab("code");
@@ -195,38 +186,21 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
         ? [{ role: "system", content: contextMessage }, ...chatMessages.map(m => ({ role: m.role, content: m.content })), { role: "user", content: userMessageContent }]
         : chatMessages.map(m => ({ role: m.role, content: m.content })).concat([{ role: "user", content: userMessageContent }]);
 
-      // Look up the API key for the current provider from localStorage
-      const apiKey = localStorage.getItem(apiProvider === "claude" ? "claude-api-key" : "openrouter-api-key");
-      if (!apiKey) {
-        throw new Error(`No ${apiProvider} API key configured. Please set your API key in Settings.`);
-      }
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "x-api-provider": apiProvider,
-        "x-api-key": apiKey,
-      };
-
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers,
+        headers: { 
+          "Content-Type": "application/json",
+          "x-api-provider": "claude",
+        },
         body: JSON.stringify({
           messages: messagesWithContext,
-          model,
+          model: "claude-opus-4-6",
           autoMcp: !isLocalFolder, // Disable MCP for local folders since we have the content
           activeProject: isLocalFolder ? undefined : currentProjectName,
-          skipServerWrite: isLocalFolder, // Don't write to output/ for local folders — client persists
         }),
       });
 
-      if (!res.ok) {
-        let errorMsg = `Request failed: ${res.status}`;
-        try {
-          const errData = await res.json();
-          if (errData.error) errorMsg = errData.error;
-        } catch { /* ignore */ }
-        throw new Error(errorMsg);
-      }
+      if (!res.ok) throw new Error("Failed to get response");
 
       // Add assistant message and stream into it
       setChatMessages((prev) => [...prev, assistantMessage]);
@@ -251,7 +225,7 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
             
             try {
               const data = JSON.parse(trimmed.slice(6));
-
+              
               if (data.type === "text" && data.content) {
                 setChatMessages((prev) =>
                   prev.map((m) =>
@@ -260,77 +234,6 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
                       : m
                   )
                 );
-              } else if (data.type === "files") {
-                // AI wrote files — batch all local state updates and persist to disk
-                if (data.fileContents && data.fileContents.length > 0) {
-                  let updatedContents = [...(currentFileContents || [])];
-                  const knownPaths = new Set(currentFiles || []);
-                  const newPaths: string[] = [];
-
-                  for (const fc of data.fileContents) {
-                    const idx = updatedContents.findIndex(f => f.path === fc.path);
-                    if (idx >= 0) {
-                      updatedContents[idx] = fc;
-                    } else {
-                      updatedContents.push(fc);
-                    }
-                    if (!knownPaths.has(fc.path)) {
-                      knownPaths.add(fc.path);
-                      newPaths.push(fc.path);
-                    }
-                  }
-
-                  // Batch React state updates together
-                  setCurrentFileContents(updatedContents);
-                  if (newPaths.length > 0) {
-                    setCurrentFiles(prev => [...(prev || []), ...newPaths]);
-                  }
-
-                  // Persist to local folder via File System Access API
-                  if (isLocalFolder && localDirHandle) {
-                    for (const fc of data.fileContents) {
-                      try {
-                        const dirParts = fc.path.split('/');
-                        let dir = localDirHandle;
-                        for (let i = 0; i < dirParts.length - 1; i++) {
-                          dir = await dir.getDirectoryHandle(dirParts[i], { create: true });
-                        }
-                        const fileHandle = await dir.getFileHandle(
-                          dirParts[dirParts.length - 1],
-                          { create: true }
-                        );
-                        const writable = await fileHandle.createWritable();
-                        await writable.write(fc.content);
-                        await writable.close();
-                      } catch (fileErr) {
-                        console.warn(`[AI Edit] Could not write local file ${fc.path}:`, fileErr);
-                      }
-                    }
-                  }
-
-                  // Flash indicator so user knows files were updated
-                  setFilesUpdated(true);
-                  setTimeout(() => setFilesUpdated(false), 3000);
-
-                  // If the file being viewed was updated, refresh it
-                  if (selectedFile) {
-                    const updated = data.fileContents.find((f: { path: string }) => f.path === selectedFile);
-                    if (updated) {
-                      setFileContent(updated.content);
-                    }
-                  }
-                }
-              } else if (data.type === "status" && data.content) {
-                // Show status updates (e.g., "Loading project files...")
-                setChatMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMessage.id
-                      ? { ...m, content: m.content + (m.content ? "\n" : "") + `[System] ${data.content}` }
-                      : m
-                  )
-                );
-              } else if (data.type === "error" && data.content) {
-                throw new Error(data.content);
               }
             } catch {
               // Skip non-JSON lines
@@ -427,12 +330,7 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div>
-            <h2 className="text-sm font-semibold flex items-center gap-2">
-              Project Visualizer
-              {filesUpdated && (
-                <span className="text-xs text-success font-normal animate-pulse">Saved</span>
-              )}
-            </h2>
+            <h2 className="text-sm font-semibold">Project Visualizer</h2>
             <p className="text-xs text-muted">{currentProjectName}{isLocalFolder ? " (Local)" : ""}</p>
           </div>
           <div className="flex items-center gap-2">
