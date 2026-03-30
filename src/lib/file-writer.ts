@@ -102,11 +102,79 @@ export function parseGeneratedFiles(text: string): GeneratedFile[] {
     }
   }
 
-  return files;
+  // Sanitize all parsed files — remove AI-injected create() boilerplate
+  return files.map(f => ({
+    ...f,
+    content: sanitizeGeneratedContent(f.path, f.content)
+  }));
 }
 
 /**
- * Get the essential root files needed to run a Symbols project as GeneratedFile objects.
+ * Sanitize file content by removing boilerplate that the AI sometimes injects
+ * into every generated file. Only index.js should have create() and smbls imports.
+ *
+ * Problems this fixes:
+ * - `import { create } from 'smbls'` in non-entry files → breaks module graph
+ * - `create(app)` in non-entry files → causes undefined component errors
+ * - `import * as app from './smbls'` in non-entry files → causes circular imports
+ * - Empty or leftover import lines
+ */
+function sanitizeGeneratedContent(path: string, content: string): string {
+  // Only sanitize files inside smbls/ — index.js (root) must keep create()
+  if (!path.startsWith("smbls/")) return content;
+
+  // Don't touch actual component files that the AI wrote correctly
+  const isComponentFile = /smbls\/components\/[A-Z][\w]*\.js$/.test(path);
+  const isPageFile = /smbls\/pages\/[a-z][\w]*\.js$/.test(path);
+  const isStateFile = path === "smbls/state.js";
+  const isConfigFile = path === "smbls/config.js";
+  const isDesignTokenFile = /smbls\/designSystem\/[A-Z][\w]*\.js$/.test(path);
+  const isDependencyFile = path === "smbls/dependencies.js";
+  const isAppFile = path === "smbls/app.js";
+
+  // For scaffold files (index.js files), always overwrite with correct content later.
+  // For everything else, sanitize.
+  const isScaffoldFile =
+    path === "smbls/index.js" ||
+    path === "smbls/pages/index.js" ||
+    path === "smbls/components/index.js" ||
+    path === "smbls/designSystem/index.js";
+
+  if (isScaffoldFile) {
+    // Strip smbls boilerplate — scaffold files will be regenerated
+    let result = content
+      .replace(/import\s*\{[^}]*\}\s*from\s*['"]smbls['"];?\n?/g, "")
+      .replace(/import\s+\*\s+as\s+app\s+from\s+['"][^'"]+['"];?\n?/g, "")
+      .replace(/import\s+app\s+from\s+['"][^'"]+['"];?\n?/g, "")
+      .replace(/create\s*\([^)]*\);?\n?$/gm, "")
+      .replace(/\ncreate\s*\([^)]*\);?\n?/g, "\n")
+      .replace(/^import\s+['"][^'"]+['"];?\n?/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    return result;
+  }
+
+  // For real content files (components, pages, state, config), remove smbls boilerplate
+  if (isComponentFile || isPageFile || isStateFile || isConfigFile || isDesignTokenFile || isDependencyFile || isAppFile) {
+    let result = content
+      // Remove top-level import { create } from 'smbls'
+      .replace(/^import\s*\{[^}]*\}\s*from\s*['"]smbls['"]\s*;?\n?/m, "")
+      // Remove create() call at end of file
+      .replace(/\n?create\s*\([^)]*\);?\s*$/, "")
+      // Remove create() call as standalone line
+      .replace(/\ncreate\s*\([^)]*\);?/, "")
+      // Remove import * as app from smbls
+      .replace(/^import\s*\*\s+as\s+app\s+from\s+['"][^'"]+['"]\s*;?\n?/m, "")
+      // Remove import app from ./smbls/app.js
+      .replace(/^import\s+app\s+from\s+['"][^'"]+['"]\s*;?\n?/m, "")
+      // Clean up multiple blank lines
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    return result;
+  }
+
+  return content;
+}
  * This allows them to be included in client downloads even when filesystem is read-only.
  */
 export function getEssentialProjectFiles(): GeneratedFile[] {
@@ -166,7 +234,16 @@ export function getEssentialProjectFiles(): GeneratedFile[] {
         }
       }, null, 2)
     },
-    // smbls/app.js — the root component, required by smbls/index.js → index.js
+    // smbls/index.js — the smbls namespace barrel, exports { app } for index.js
+    {
+      path: "smbls/index.js",
+      content: `export { default as app } from './app.js'
+export * as components from './components/index.js'
+export { default as pages } from './pages/index.js'
+export { default as designSystem } from './designSystem/index.js'
+`
+    },
+    // smbls/app.js — root component, required by smbls/index.js
     {
       path: "smbls/app.js",
       content: `export default {
@@ -176,15 +253,6 @@ export function getEssentialProjectFiles(): GeneratedFile[] {
   margin: '0',
   minHeight: '100vh'
 }
-`
-    },
-    // smbls/index.js — the smbls namespace barrel, exports { app } for index.js
-    {
-      path: "smbls/index.js",
-      content: `export { default as app } from './app.js'
-export * as components from './components/index.js'
-export { default as pages } from './pages/index.js'
-export { default as designSystem } from './designSystem/index.js'
 `
     },
     // smbls/components/index.js — placeholder, re-exported components go here
@@ -318,35 +386,44 @@ async function createPlaceholderIndexFiles(projectDir: string, generatedFiles: G
     }
   }
 
-  // Create placeholder index.js for each standard directory that doesn't have one
+  // Create placeholder index.js for each standard directory.
+  // We ALWAYS regenerate these to ensure correct content — the AI may have
+  // injected broken smbls boilerplate (create(), smbls imports) into them.
   for (const dir of standardDirs) {
     const indexPath = path.join(projectDir, "smbls", dir, "index.js");
-    const generatedIndex = generatedFiles.find(f => 
-      f.path === `smbls/${dir}/index.js` || f.path === `smbls\\${dir}\\index.js`
-    );
-    // Skip if AI generated a non-empty index.js (e.g. pages/index.js with actual routes)
-    const hasRealIndex = generatedIndex && 
-      generatedIndex.content.trim() !== "" && 
-      generatedIndex.content.trim() !== "export default {}";
+    const dirPath = path.dirname(indexPath);
+    await fs.mkdir(dirPath, { recursive: true });
 
-    if (!hasRealIndex) {
-      const dirPath = path.dirname(indexPath);
-      await fs.mkdir(dirPath, { recursive: true });
-      
-      // For components directory, create proper re-exports of all component files
-      if (dir === "components" && referencedDirs.has("components")) {
-        const componentFiles = generatedFiles.filter(f => 
-          f.path.match(/smbls[/\\]components[/\\][^/\\]+\.js$/)
+    // For components directory, create re-exports of all component files
+    if (dir === "components" && referencedDirs.has("components")) {
+      const componentFiles = generatedFiles.filter(f =>
+        f.path.match(/smbls[/\\]components[/\\][^/\\]+\.js$/)
+      );
+      const reExports = componentFiles.map(f => {
+        const fileName = path.basename(f.path);
+        const componentName = fileName.replace('.js', '');
+        return `export { ${componentName} } from './${fileName}'`;
+      }).join("\n");
+      await fs.writeFile(indexPath, reExports ? `${reExports}\n` : "export default {}\n", "utf-8");
+    } else {
+      // For pages, designSystem, etc., always use correct scaffold content
+      // The AI may have written broken smbls boilerplate here
+      if (dir === "pages") {
+        await fs.writeFile(indexPath,
+          `import { main } from './main.js'\n\nexport default {\n  '/': main\n}\n`, "utf-8");
+      } else if (dir === "designSystem") {
+        // designSystem/index.js re-exports tokens
+        const tokenFiles = generatedFiles.filter(f =>
+          f.path.match(/smbls[/\\]designSystem[/\\][A-Z][\w]*\.js$/) &&
+          f.path !== "smbls/designSystem/index.js"
         );
-        const reExports = componentFiles.map(f => {
+        const reExports = tokenFiles.map(f => {
           const fileName = path.basename(f.path);
-          const componentName = fileName.replace('.js', '');
-          return `export { ${componentName} } from './${fileName}'`;
+          const tokenName = fileName.replace('.js', '');
+          return `export { ${tokenName} } from './${fileName}'`;
         }).join("\n");
-        await fs.writeFile(indexPath, reExports ? `${reExports}\n` : "export default {}\n", "utf-8");
-      } else if (dir === "components" && !referencedDirs.has("components")) {
-        // components dir exists but no specific files referenced yet - create empty export
-        await fs.writeFile(indexPath, "export default {}\n", "utf-8");
+        await fs.writeFile(indexPath,
+          reExports ? `${reExports}\nexport { default as designSystem } from './designSystem.js'\n` : "export default {}\n", "utf-8");
       } else {
         await fs.writeFile(indexPath, "export default {}\n", "utf-8");
       }
@@ -406,8 +483,17 @@ export async function writeGeneratedFiles(
     // Create essential root files (index.html, index.js, package.json)
     await createProjectRootFiles(projectDir);
 
-    // Then write the generated files
+    // Skip essential scaffold files — writeGeneratedFiles must preserve correct scaffold content
+    const essentialPaths = new Set(
+      getEssentialProjectFiles().map(f => f.path)
+    );
+
+    // Write the generated files (skip essential scaffold — these have correct content already)
     for (const file of files) {
+      if (essentialPaths.has(file.path)) {
+        // Don't overwrite correct essential scaffold with AI-generated content
+        continue;
+      }
       const fullPath = path.join(projectDir, file.path);
       const dir = path.dirname(fullPath);
       await fs.mkdir(dir, { recursive: true });
@@ -415,21 +501,30 @@ export async function writeGeneratedFiles(
       written.push(file.path);
     }
 
-    // Create default app.js FIRST — before smbls/index.js tries to import it.
-    // index.js imports { app } from './smbls', so smbls/index.js must export app.
-    const hasAppJs = files.some(f => f.path.match(/smbls[/\\]app\.js$/));
-    if (!hasAppJs) {
+    // Create smbls/app.js — always use correct content.
+    // The AI may have generated it with broken smbls boilerplate, which sanitization
+    // strips away, leaving an empty file. We must always write a valid app component.
+    const appFile = files.find(f => f.path.match(/smbls[/\\]app\.js$/));
+    const appContent = appFile?.content?.trim();
+    const appJsPath = path.join(projectDir, "smbls", "app.js");
+
+    if (!appContent) {
+      // No AI-generated app.js, or it was emptied by sanitization — write the fallback
       await fs.writeFile(
-        path.join(projectDir, "smbls", "app.js"),
+        appJsPath,
         `export default {
   tag: 'main',
   id: 'app',
   padding: '0',
   margin: '0',
   minHeight: '100vh'
-}\n`,
+}
+`,
         "utf-8"
       );
+    } else {
+      // AI generated a real app.js — use it (it's already been sanitized)
+      await fs.writeFile(appJsPath, appFile!.content, "utf-8");
     }
 
     // Create placeholder index.js files for any missing directories

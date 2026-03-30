@@ -41,11 +41,45 @@ CRITICAL WORKFLOW - MANDATORY VERIFICATION:
 - NEVER leave smbls/index.js without state and config exports
 
 REFERENCE PROJECT USAGE:
-- Use the symbols/index.js pattern for imports and create() setup
-- Follow the symbols/config.js structure for configuration
-- Mirror the folder structure: components/, pages/, functions/, designSystem/, etc.
-- Match the export patterns in each directory's index.js
-- Apply the same coding style and conventions
+- Follow the folder structure: smbls/components/, smbls/pages/, smbls/designSystem/, etc.
+- Components use named exports (export const Navbar = { })
+- Pages export a routes object: export default { '/': main }
+- The root entry point (index.js) calls create(), but component/page files do NOT
+
+CORRECT smbls/ STRUCTURE (component file):
+\`\`\`js // smbls/components/Navbar.js
+export const Navbar = {
+  extends: 'Flex',
+  flow: 'row',
+  children: [Logo, SearchPill, RightSection]
+}
+\`\`\`
+
+CORRECT smbls/pages/index.js:
+\`\`\`js
+import { main } from './main.js'
+export default {
+  '/': main
+}
+\`\`\`
+
+Page files use named exports. Route registry uses default export.
+
+CORRECT smbls/index.js (root namespace):
+\`\`\`js
+export { default as app } from './app.js'
+export * as components from './components/index.js'
+export { default as pages } from './pages/index.js'
+export { default as designSystem } from './designSystem/index.js'
+\`\`\`
+
+WRONG (NEVER do this):
+\`\`\`js
+import { create } from 'smbls'
+import app from './smbls/index.js'
+create(app)
+\`\`\`
+Never put create() or smbls imports in files other than the root index.js.
 
 When generating or editing project files, you MUST format each file exactly as follows:
 
@@ -462,12 +496,63 @@ ${projectContext}`,
             written = await writeGeneratedFiles(files, finalProjectName);
           }
           
-          // Always include essential files + AI-generated files in the response
-          // For local folders: essential files = the ZIP bundle the user downloaded
-          // For server projects: essential files = everything needed to complete the project
+          // Build the file bundle for the client (ZIP download).
+          // Essential scaffold files are ALWAYS the primary source to ensure correct structure.
+          // AI-generated files supplement missing paths only.
+          // For scaffold index.js files (like smbls/pages/index.js), the essential fallback
+          // is used if the AI's version has empty/broken content.
           const essentialFiles = getEssentialProjectFiles();
-          const allFileContents = [...essentialFiles, ...files];
-          const allFilePaths = [...essentialFiles.map(f => f.path), ...written];
+          const essentialPaths = new Set(essentialFiles.map(f => f.path));
+
+          // Check if a scaffold index.js has meaningful content (beyond stripped imports)
+          const isMeaningfulScaffold = (content: string, filePath: string): boolean => {
+            if (filePath === "index.js") return content.includes("create(");
+            if (filePath === "smbls/index.js") return content.includes("export");
+            if (filePath === "smbls/app.js") return content.includes("export default");
+            if (filePath.endsWith("/index.js")) {
+              const hasNamedExports = content.includes("export {") || content.includes("export *");
+              const hasRealRoutes = content.includes("'/") || content.includes('"/');
+              const hasDefaultExport = content.includes("export default");
+              return hasNamedExports || hasRealRoutes || hasDefaultExport;
+            }
+            return true;
+          };
+
+          const allFileContents: Array<{ path: string; content: string }> = [];
+          const allFilePaths: string[] = [];
+          const seenPaths = new Set<string>();
+
+          const addFile = (f: { path: string; content: string }) => {
+            if (!seenPaths.has(f.path)) {
+              seenPaths.add(f.path);
+              allFileContents.push(f);
+              allFilePaths.push(f.path);
+            }
+          };
+
+          // First: essential scaffold files (primary source, correct by definition)
+          for (const ef of essentialFiles) {
+            const aiFile = files.find(f => f.path === ef.path);
+            if (aiFile) {
+              // Prefer AI file only if it has meaningful content; otherwise use essential
+              if (isMeaningfulScaffold(aiFile.content, ef.path)) {
+                addFile(aiFile);
+              } else {
+                addFile(ef); // Use correct essential fallback
+              }
+            } else {
+              // No AI file — always use essential
+              addFile(ef);
+            }
+          }
+
+          // Second: AI-generated files that don't overlap with essential paths
+          // These supplement the bundle (e.g., components, pages, state, design tokens)
+          for (const f of files) {
+            if (!essentialPaths.has(f.path)) {
+              addFile(f);
+            }
+          }
           
           // Send full file contents to client so it can handle storage
           send({ 
