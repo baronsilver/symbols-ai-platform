@@ -382,6 +382,7 @@ ${code}
               <GeneratedFilesPanel
                 projectName={generatedFiles.projectName}
                 files={generatedFiles.files}
+                fileContents={generatedFiles.fileContents}
                 onViewProject={() => setShowVisualizer(true)}
               />
             )}
