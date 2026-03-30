@@ -12,10 +12,12 @@ interface ProjectVisualizerProps {
   projectName: string;
   files: string[];
   fileContents?: Array<{ path: string; content: string }>;
+  model: string;
+  apiProvider: "openrouter" | "claude";
   onClose: () => void;
 }
 
-export function ProjectVisualizer({ projectName: initialProjectName, files: initialFiles, fileContents: initialFileContents, onClose }: ProjectVisualizerProps) {
+export function ProjectVisualizer({ projectName: initialProjectName, files: initialFiles, fileContents: initialFileContents, model, apiProvider, onClose }: ProjectVisualizerProps) {
   const [currentProjectName, setCurrentProjectName] = useState(initialProjectName);
   const [currentFiles, setCurrentFiles] = useState(initialFiles);
   const [currentFileContents, setCurrentFileContents] = useState(initialFileContents);
@@ -34,15 +36,6 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [smblsInstalled, setSmblsInstalled] = useState<boolean | null>(null);
   const [smblsLoggedIn, setSmblsLoggedIn] = useState<boolean | null>(null);
-
-  // Get API key from localStorage for the AI Edit chat
-  const getApiKey = (): { key: string; provider: "openrouter" | "claude" } | null => {
-    if (typeof window === "undefined") return null;
-    const provider = localStorage.getItem("api-provider") as "openrouter" | "claude" | null;
-    if (!provider) return null;
-    const key = localStorage.getItem(provider === "claude" ? "claude-api-key" : "openrouter-api-key");
-    return key ? { key, provider } : null;
-  };
 
   // Check smbls CLI status on mount (only for non-local projects)
   useEffect(() => {
@@ -195,27 +188,24 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
         ? [{ role: "system", content: contextMessage }, ...chatMessages.map(m => ({ role: m.role, content: m.content })), { role: "user", content: userMessageContent }]
         : chatMessages.map(m => ({ role: m.role, content: m.content })).concat([{ role: "user", content: userMessageContent }]);
 
-      // Get API credentials
-      const apiCreds = getApiKey();
-      if (!apiCreds) {
-        throw new Error("No API key configured. Please set your API key in Settings.");
+      // Look up the API key for the current provider from localStorage
+      const apiKey = localStorage.getItem(apiProvider === "claude" ? "claude-api-key" : "openrouter-api-key");
+      if (!apiKey) {
+        throw new Error(`No ${apiProvider} API key configured. Please set your API key in Settings.`);
       }
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "x-api-provider": apiCreds.provider,
-        "x-api-key": apiCreds.key,
+        "x-api-provider": apiProvider,
+        "x-api-key": apiKey,
       };
-
-      // Use the model appropriate for the provider
-      const model = apiCreds.provider === "claude" ? "claude-opus-4-6" : "anthropic/claude-opus-4.6";
 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers,
         body: JSON.stringify({
           messages: messagesWithContext,
-          model,
+          model: model, // Use the prop model, which is provider-aware
           autoMcp: !isLocalFolder, // Disable MCP for local folders since we have the content
           activeProject: isLocalFolder ? undefined : currentProjectName,
         }),

@@ -425,6 +425,8 @@ ${code}
           projectName={"projectName" in displayProject ? displayProject.projectName : displayProject.name}
           files={displayProject.files}
           fileContents={"fileContents" in displayProject ? displayProject.fileContents : undefined}
+          model={model}
+          apiProvider={apiProvider}
           onClose={() => {
             setShowVisualizer(false);
             setSelectedProject(null);
