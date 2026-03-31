@@ -99,6 +99,35 @@ onClick: (e, el, s) => { s.count = s.count + 1 }          // WRONG — no re-ren
 
 Root-level state (global): `s.root.update({ key: val })`
 
+### CRITICAL: Always use optional chaining for nested state access
+
+When accessing nested state properties that might be undefined, use optional chaining (`?.`) with fallback values:
+
+```js
+// CORRECT — safe access with optional chaining
+value: (el, s) => s.root.searchForm?.location || '',
+onChange: (e, el, s) => {
+  s.root.update({
+    searchForm: {
+      location: e.target.value,
+      checkIn: s.root.searchForm?.checkIn || '',
+      checkOut: s.root.searchForm?.checkOut || '',
+      guests: s.root.searchForm?.guests || 1
+    }
+  })
+}
+
+// WRONG — will throw TypeError if searchForm is undefined
+value: (el, s) => s.root.searchForm.location,
+onChange: (e, el, s) => {
+  s.root.update({
+    searchForm: { ...s.root.searchForm, location: e.target.value }
+  })
+}
+```
+
+**Always provide default values** when destructuring or spreading potentially undefined objects.
+
 ---
 
 ## 9. All folders are flat — no subfolders
@@ -159,3 +188,52 @@ smbls/
 └── designSystem/
     └── index.js              # export default { COLOR, THEME, ... }
 ```
+
+---
+
+## 13. Use explicit hex colors for text — avoid color tokens on light backgrounds
+
+Color tokens like `gray800`, `gray400`, `gray600` can resolve to white on light themes, causing invisible text. **Always use explicit hex values** for text colors:
+
+```js
+// CORRECT — explicit hex values ensure visibility
+export const Navbar = {
+  LogoText: {
+    extends: 'Flex',
+    tag: 'span',
+    text: 'airbnb',
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#FF385C'  // Explicit hex
+  },
+  SearchText: {
+    extends: 'Flex',
+    tag: 'span',
+    text: 'Anywhere',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#222222'  // Dark gray, not 'gray800'
+  }
+}
+
+// WRONG — color tokens may resolve to white on light backgrounds
+export const Navbar = {
+  LogoText: {
+    color: 'coral'    // May be invisible
+  },
+  SearchText: {
+    color: 'gray800'   // May be white on white bg
+  }
+}
+```
+
+**Common color mappings:**
+- `coral` → `#FF385C`
+- `coralHover` → `#E31C5F`
+- `gray800` → `#222222`
+- `gray600` → `#484848`
+- `gray400` → `#717171`
+- `gray50` → `#f7f7f7`
+- `gray100` → `#f1f1f1`
+- `borderLight` → `#EBEBEB`
+- `borderMedium` → `#DDDDDD`

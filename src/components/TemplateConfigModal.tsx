@@ -244,18 +244,48 @@ export function TemplateConfigModal({
           {/* Advanced Sections Tab */}
           {activeTab === "advanced" && !showPreview && (
             <div className="flex-1 overflow-y-auto p-6 space-y-2">
-              {/* Project Overview */}
+              {/* Project Overview - Editable */}
               {parsed?.intro && (
                 <div className="rounded-xl border border-border overflow-hidden bg-background/50 mb-3">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-surface/50">
-                    <span className="text-sm font-medium text-foreground">Project Overview</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection("__intro__")}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface/50 transition-colors"
+                  >
+                    <span className="text-sm font-semibold text-foreground">Project Overview</span>
                     <span className="text-[10px] px-2 py-0.5 rounded bg-surface-2 text-muted border border-border">Intro</span>
-                  </div>
-                  <div className="px-4 py-3 border-t border-border">
-                    <pre className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed">
-                      {parsed.intro.slice(0, 300)}{parsed.intro.length > 300 ? "..." : ""}
-                    </pre>
-                  </div>
+                    {isModified("__intro__") && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent/20 text-accent border border-accent/30 shrink-0">
+                        Modified
+                      </span>
+                    )}
+                    <div className="flex-1" />
+                    {isModified("__intro__") && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); resetSection("__intro__"); }}
+                        className="text-[10px] px-2 py-0.5 rounded border border-muted/40 text-muted hover:border-error/50 hover:text-error transition-colors shrink-0 mr-1"
+                      >
+                        Reset
+                      </button>
+                    )}
+                    {expandedSections.has("__intro__") ? (
+                      <ChevronDown size={14} className="text-muted shrink-0" />
+                    ) : (
+                      <ChevronRight size={14} className="text-muted shrink-0" />
+                    )}
+                  </button>
+                  
+                  {expandedSections.has("__intro__") && (
+                    <div className="border-t border-border">
+                      <textarea
+                        value={editedSections["__intro__"] ?? parsed.intro}
+                        onChange={(e) => handleSectionEdit("__intro__", e.target.value)}
+                        className="w-full bg-surface border-0 rounded-b-xl px-4 py-3 text-xs text-foreground focus:outline-none transition-all min-h-[140px] resize-y font-mono leading-relaxed"
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -330,24 +360,40 @@ export function TemplateConfigModal({
             </div>
           )}
 
-          {/* Preview Tab */}
+          {/* Preview Tab - Editable */}
           {showPreview && (
             <div className="flex-1 overflow-hidden flex flex-col">
               <div className="flex items-center justify-between px-6 py-3 border-b border-border/50 bg-surface-2/20 shrink-0">
-                <p className="text-xs text-muted">Full prompt that will be sent to AI</p>
-                <button
-                  type="button"
-                  onClick={copyPreview}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-surface hover:bg-surface-2 transition-colors text-muted hover:text-foreground border border-border"
-                >
-                  {previewCopied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
-                  {previewCopied ? "Copied!" : "Copy"}
-                </button>
+                <p className="text-xs text-muted">Full prompt that will be sent to AI — you can edit directly</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    className="text-xs text-accent hover:underline"
+                  >
+                    Back to Sections
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyPreview}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-surface hover:bg-surface-2 transition-colors text-muted hover:text-foreground border border-border"
+                  >
+                    {previewCopied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                    {previewCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                <pre className="text-xs text-muted font-mono whitespace-pre-wrap leading-relaxed break-words">
-                  {buildFinalPrompt()}
-                </pre>
+              <div className="flex-1 overflow-hidden">
+                <textarea
+                  value={buildFinalPrompt()}
+                  onChange={(e) => {
+                    // Allow direct editing of the full prompt
+                    // This will be treated as custom instructions override
+                    setCustomInstructions(e.target.value);
+                  }}
+                  className="w-full h-full bg-surface px-6 py-4 text-xs text-foreground focus:outline-none resize-none font-mono leading-relaxed"
+                  spellCheck={false}
+                />
               </div>
             </div>
           )}

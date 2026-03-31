@@ -560,7 +560,7 @@ smbls/state.js, smbls/config.js (with globalTheme: 'dark'), smbls/designSystem/C
 **CRITICAL INTERACTIVITY:**
 1. **Menu Tabs**: \`onClick: (e, el, s) => { s.root.update({ activeMenuCategory: 'Mains' }) }\`, style: \`borderBottomColor: (el, s) => s.root.activeMenuCategory === 'Starters' ? 'amber' : 'transparent'\`
 2. **Dish Cards**: \`display: (el, s) => s.root.activeMenuCategory === 'Starters' ? 'flex' : 'none'\`
-3. **Form Inputs**: \`onInput: (e, el, s) => { s.root.update({ reservationForm: { ...s.root.reservationForm, name: e.target.value } }) }\`
+3. **Form Inputs**: \`value: (el, s) => s.root.reservationForm?.name || ''\`, \`onInput: (e, el, s) => { s.root.update({ reservationForm: { name: e.target.value, email: s.root.reservationForm?.email || '', phone: s.root.reservationForm?.phone || '', date: s.root.reservationForm?.date || '', guests: s.root.reservationForm?.guests || 2 } }) }\`
 4. **Submit**: \`onClick: (e, el, s) => { e.preventDefault(); console.log('Reservation:', s.root.reservationForm); alert('Reservation submitted!') }\`
 5. **Book a Table CTA**: scroll to reservation section
 6. **NEVER use direct assignment** — always use \`s.root.update({ key: value })\`
@@ -878,7 +878,7 @@ smbls/state.js, smbls/config.js (with globalTheme: 'light'), smbls/designSystem/
 1. **Room Filters**: \`onClick: (e, el, s) => { s.root.update({ roomFilter: 'Suites' }) }\`, style: \`borderBottomColor: (el, s) => s.root.roomFilter === 'All' ? 'gold' : 'transparent'\`
 2. **Room Cards**: \`display: (el, s) => s.root.roomFilter === 'All' || s.root.roomFilter === 'Suites' ? 'flex' : 'none'\`
 3. **Book Room**: \`onClick: (e, el, s) => { s.root.update({ selectedRoom: 1, showBookingModal: true }) }\`
-4. **Date Inputs**: \`onChange: (e, el, s) => { s.root.update({ bookingForm: { ...s.root.bookingForm, checkIn: e.target.value } }) }\`
+4. **Date Inputs**: \`value: (el, s) => s.root.bookingForm?.checkIn || ''\`, \`onChange: (e, el, s) => { s.root.update({ bookingForm: { checkIn: e.target.value, checkOut: s.root.bookingForm?.checkOut || '', adults: s.root.bookingForm?.adults || 2, children: s.root.bookingForm?.children || 0, rooms: s.root.bookingForm?.rooms || 1 } }) }\`
 5. **Check Availability**: \`onClick: (e, el, s) => { console.log('Booking:', s.root.bookingForm); alert('Checking availability...') }\`
 6. **NEVER use direct assignment** — always use \`s.root.update({ key: value })\`
 
@@ -1246,12 +1246,15 @@ smbls/state.js, smbls/config.js (with globalTheme: 'dark'), smbls/designSystem/C
 - globalTheme: 'light' (IMPORTANT - Airbnb uses light theme)
 
 **CRITICAL INTERACTIVITY:**
-1. **Category Filter**: \`onClick: (e, el, s) => { s.root.update({ categoryFilter: 'Beachfront' }) }\`, style: \`borderBottomColor: (el, s) => s.root.categoryFilter === 'All' ? 'gray800' : 'transparent'\`
-2. **Listing Cards**: \`display: (el, s) => s.root.categoryFilter === 'All' || s.root.categoryFilter === 'Beachfront' ? 'flex' : 'none'\`
-3. **Listing Click**: \`onClick: (e, el, s) => { s.root.update({ selectedListing: 1, showBookingModal: true }) }\`
-4. **Favorite Heart**: \`onClick: (e, el, s) => { e.stopPropagation(); var favs = s.root.favorites.slice(); var idx = favs.indexOf(1); if (idx > -1) favs.splice(idx, 1); else favs.push(1); s.root.update({ favorites: favs }) }\`
-5. **Search Form**: \`onChange: (e, el, s) => { s.root.update({ searchForm: { ...s.root.searchForm, location: e.target.value } }) }\`
-6. **NEVER use direct assignment** — always use \`s.root.update({ key: value })\`
+1. **Category Filter**: {{ onClick: (e, el, s) => { s.root.update({ categoryFilter: 'Beachfront' }) } }}, style: {{ borderBottomColor: (el, s) => s.root.categoryFilter === 'All' ? 'gray800' : 'transparent' }}
+2. **Listing Cards**: {{ display: (el, s) => s.root.categoryFilter === 'All' || s.root.categoryFilter === 'Beachfront' ? 'flex' : 'none' }}
+3. **Listing Click**: {{ onClick: (e, el, s) => { s.root.update({ selectedListing: 1, showBookingModal: true }) } }}
+4. **Favorite Heart**: {{ onClick: (e, el, s) => { e.stopPropagation(); var favs = s.root.favorites.slice(); var idx = favs.indexOf(1); if (idx > -1) favs.splice(idx, 1); else favs.push(1); s.root.update({ favorites: favs }) } }}
+5. **Search Form**: Use optional chaining for safe state access:
+   - {{ value: (el, s) => s.root.searchForm?.location || '' }}
+   - {{ onChange: (e, el, s) => { s.root.update({ searchForm: { location: e.target.value, checkIn: s.root.searchForm?.checkIn || '', checkOut: s.root.searchForm?.checkOut || '', guests: s.root.searchForm?.guests || 1 } }) } }}
+   - NEVER use spread operator on potentially undefined objects — always provide explicit fallback values
+6. **NEVER use direct assignment** — always use {{ s.root.update({ key: value }) }}
 7. **config.js MUST have globalTheme: 'light'** — Airbnb uses a light theme
 
 **IMPORTANT - main.js MUST use actual components:**
