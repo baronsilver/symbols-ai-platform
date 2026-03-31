@@ -7,6 +7,8 @@ import { ProjectPreview } from "./ProjectPreview";
 import { ChatMessage } from "./ChatMessage";
 import { X, ExternalLink, Code2, Monitor, Send, Loader, MessageSquare, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Message } from "@/lib/types";
+import { writeLocalFile } from "@/lib/local-file-system";
+import { parseGeneratedFiles } from "@/lib/parse-files";
 
 interface ProjectVisualizerProps {
   projectName: string;
@@ -28,6 +30,9 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatApiProvider, setChatApiProvider] = useState<"openrouter" | "claude">("claude");
+  const [chatApiKey, setChatApiKey] = useState("");
+  const [chatModel, setChatModel] = useState("claude-opus-4-6");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<"idle" | "checking" | "pushing" | "success" | "error">("idle");
@@ -50,6 +55,23 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
         });
     }
   }, [isLocalFolder]);
+
+  // Load API key and provider from localStorage on mount
+  useEffect(() => {
+    const storedProvider = localStorage.getItem("api-provider") as "openrouter" | "claude" | null;
+    const claudeKey = localStorage.getItem("claude-api-key");
+    const openrouterKey = localStorage.getItem("openrouter-api-key");
+
+    let provider = storedProvider;
+    if (!provider) {
+      provider = claudeKey ? "claude" : "openrouter";
+    }
+
+    setChatApiProvider(provider);
+    setChatModel(provider === "claude" ? "claude-opus-4-6" : "anthropic/claude-opus-4.6");
+    const key = provider === "claude" ? claudeKey : openrouterKey;
+    if (key) setChatApiKey(key);
+  }, []);
 
   const handlePushToSymbols = async () => {
     setPushStatus("checking");
@@ -123,11 +145,12 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
   };
 
   // Handle local folder selection from ProjectPreview
-  const handleLocalFolderSelect = (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>) => {
+  const handleLocalFolderSelect = (folderName: string, files: string[], fileContents: Array<{ path: string; content: string }>, dirHandle?: any) => {
     setCurrentProjectName(folderName);
     setCurrentFiles(files);
     setCurrentFileContents(fileContents);
     setIsLocalFolder(true);
+    setLocalDirHandle(dirHandle || null);
     setSelectedFile(null);
     setFileContent("");
     setActiveTab("code");
@@ -164,7 +187,7 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
       role: "assistant",
       content: "",
       timestamp: Date.now(),
-      model: "claude-opus-4-6",
+      model: chatModel,
     };
     
     setChatMessages((prev) => [...prev, userMessage]);
@@ -186,16 +209,21 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
         ? [{ role: "system", content: contextMessage }, ...chatMessages.map(m => ({ role: m.role, content: m.content })), { role: "user", content: userMessageContent }]
         : chatMessages.map(m => ({ role: m.role, content: m.content })).concat([{ role: "user", content: userMessageContent }]);
 
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-api-provider": chatApiProvider,
+      };
+      if (chatApiKey) {
+        headers["x-api-key"] = chatApiKey;
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-api-provider": "claude",
-        },
+        headers,
         body: JSON.stringify({
           messages: messagesWithContext,
-          model: "claude-opus-4-6",
-          autoMcp: !isLocalFolder, // Disable MCP for local folders since we have the content
+          model: chatModel,
+          autoMcp: !isLocalFolder,
           activeProject: isLocalFolder ? undefined : currentProjectName,
         }),
       });
@@ -206,27 +234,30 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
       setChatMessages((prev) => [...prev, assistantMessage]);
       setChatLoading(false);
 
+      let streamedContent = "";
+
       const reader = res.body?.getReader();
       if (reader) {
         const decoder = new TextDecoder();
         let buffer = "";
-        
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          
+
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n\n");
           buffer = lines.pop() ?? "";
-          
+
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed.startsWith("data: ")) continue;
-            
+
             try {
               const data = JSON.parse(trimmed.slice(6));
-              
+
               if (data.type === "text" && data.content) {
+                streamedContent += data.content;
                 setChatMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantMessage.id
@@ -235,9 +266,44 @@ export function ProjectVisualizer({ projectName: initialProjectName, files: init
                   )
                 );
               }
+
+              if (data.type === "files" && data.files && isLocalFolder && localDirHandle) {
+                // Write files to local folder
+                const files = Array.isArray(data.files) ? data.files : data.fileContents;
+                for (const file of files) {
+                  try {
+                    await writeLocalFile(localDirHandle, file.path, file.content);
+                    setCurrentFileContents(prev =>
+                      prev?.map(f => f.path === file.path ? { ...f, content: file.content } : f)
+                    );
+                  } catch (err) {
+                    console.error(`Failed to write file ${file.path}:`, err);
+                  }
+                }
+              }
             } catch {
               // Skip non-JSON lines
             }
+          }
+        }
+      }
+
+      // Parse files from the streamed content if we have a local folder
+      if (isLocalFolder && localDirHandle && streamedContent) {
+        const parsed = parseGeneratedFiles(streamedContent);
+        for (const file of parsed) {
+          try {
+            await writeLocalFile(localDirHandle, file.path, file.content);
+            setCurrentFileContents(prev => {
+              const exists = prev?.some(f => f.path === file.path);
+              if (exists) {
+                return prev?.map(f => f.path === file.path ? { ...f, content: file.content } : f);
+              } else {
+                return [...(prev || []), { path: file.path, content: file.content }];
+              }
+            });
+          } catch (err) {
+            console.error(`Failed to write file ${file.path}:`, err);
           }
         }
       }
